@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/../.."
+exec .venv/bin/python -m streamlit run app/main.py \
+  --server.port "$PORT" --server.address 0.0.0.0 --server.headless true \
+  --server.enableCORS false --server.enableXsrfProtection false \
+  --browser.gatherUsageStats false

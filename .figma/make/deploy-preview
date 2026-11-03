@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# "Build": assemble the static graph page and its local assets into dist/.
+rm -rf dist
+mkdir -p dist
+cp data/processed/decoction_knowledge_graph.html dist/index.html
+cp -R lib dist/lib
+[[ -d "dist" ]] || {
+  echo "Expected build output at dist" >&2
+  exit 1
+}
+figma make deploy-preview --build-dir "dist"

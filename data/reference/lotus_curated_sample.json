@@ -1,0 +1,131 @@
+{
+  "Hypericum perforatum": [
+    {
+      "compound_name": "Hypericin",
+      "smiles": "CC1=CC(=O)C2=C(C3=C(C=C(C4=C3C5=C2C1=C6C(=CC(=O)C7=C(C8=C(C=C(C4=C8C5=C67)O)O)O)C)O)O)O",
+      "inchi_key": "YDOIFHVUBCIUHF-UHFFFAOYSA-N",
+      "doi": "10.1016/j.phytochem.2004.08.022"
+    },
+    {
+      "compound_name": "Hyperforin",
+      "smiles": "CC(C)C(=O)C12C(=O)C(=C(C(C1=O)(CC(C2(C)CCC=C(C)C)CC=C(C)C)CC=C(C)C)O)CC=C(C)C",
+      "inchi_key": "KGSZHKRKHXOAMG-HQKKAZOISA-N",
+      "doi": "10.1055/s-2003-40654"
+    },
+    {
+      "compound_name": "Rutin",
+      "smiles": "CC1C(C(C(C(O1)OCC2C(C(C(C(O2)OC3=C(OC4=CC(=CC(=C4C3=O)O)O)C5=CC(=C(C=C5)O)O)O)O)O)O)O)O",
+      "inchi_key": "IKGXIBQEEMLURG-NVPNHPEKSA-N",
+      "doi": "10.1016/j.jep.2011.08.077"
+    },
+    {
+      "compound_name": "Quercetin",
+      "smiles": "C1=CC(=C(C=C1C2=C(C(=O)C3=C(C=C(C=C3O2)O)O)O)O)O",
+      "inchi_key": "REFJWTPEDVJJIY-UHFFFAOYSA-N",
+      "doi": "10.1016/j.fitote.2019.104251"
+    },
+    {
+      "compound_name": "Chlorogenic acid",
+      "smiles": "C1C(C(C(CC1(C(=O)O)O)OC(=O)C=CC2=CC(=C(C=C2)O)O)O)O",
+      "inchi_key": "CWVRJTMFETXNAD-JUHZACGLSA-N",
+      "doi": "10.1002/ptr.2612"
+    },
+    {
+      "compound_name": "Pseudohypericin",
+      "smiles": "CC1=CC(=O)C2=C(C3=C(C=C(C4=C3C5=C2C1=C6C(=CC(=O)C7=C(C8=C(C=C(C4=C8C5=C67)O)O)O)CO)O)O)O",
+      "inchi_key": "NODGUBIGZKATOM-UHFFFAOYSA-N",
+      "doi": "10.1016/S0031-9422(00)80442-9"
+    },
+    {
+      "compound_name": "Biapigenin",
+      "smiles": "C1=CC(=CC=C1C2=CC(=O)C3=C(O2)C(=C(C=C3O)O)C4=C(OC5=CC(=CC(=C5C4=O)O)O)C6=CC=C(C=C6)O)O",
+      "inchi_key": "IQAMTZLKUHMPPE-UHFFFAOYSA-N",
+      "doi": "10.1055/s-2006-957833"
+    }
+  ],
+  "Gentiana lutea": [
+    {
+      "compound_name": "Gentiopicroside",
+      "smiles": "C=CC1C(OC=C2C1=CCOC2=O)OC3C(C(C(C(O3)CO)O)O)O",
+      "inchi_key": "DUAGQYUORDTXOR-GPQRQXLASA-N",
+      "doi": "10.1016/j.jep.2017.03.017"
+    },
+    {
+      "compound_name": "Amarogentin",
+      "smiles": "C=CC1C2CCOC(=O)C2=COC1OC3C(C(C(C(O3)CO)O)O)OC(=O)C4=C(C=C(C=C4O)O)C5=CC(=CC=C5)O",
+      "inchi_key": "DBOVHQOUSDWAPQ-WTONXPSSSA-N",
+      "doi": "10.1016/j.phytochem.2016.12.015"
+    },
+    {
+      "compound_name": "Gentisin",
+      "smiles": "COC1=CC(=C2C(=C1)OC3=C(C2=O)C=C(C=C3)O)O",
+      "inchi_key": "XOXYHGOIRWABTC-UHFFFAOYSA-N",
+      "doi": "10.1021/np980182q"
+    },
+    {
+      "compound_name": "Swertiamarin",
+      "smiles": "C=CC1C(OC=C2C1(CCOC2=O)O)OC3C(C(C(C(O3)CO)O)O)O",
+      "inchi_key": "HEYZWPRKKUGDCR-QBXMEVCASA-N",
+      "doi": "10.1016/j.phytochem.2010.05.003"
+    },
+    {
+      "compound_name": "Loganic acid",
+      "smiles": "CC1C(CC2C1C(OC=C2C(=O)O)OC3C(C(C(C(O3)CO)O)O)O)O",
+      "inchi_key": "JNNGEAWILNVFFD-CDJYTOATSA-N",
+      "doi": "10.1016/j.foodchem.2014.07.036"
+    }
+  ],
+  "Artemisia annua": [
+    {
+      "compound_name": "Artemisinin",
+      "smiles": "CC1CCC2C(C(=O)OC3C24C1CCC(O3)(OO4)C)C",
+      "inchi_key": "BLUAFEHZUWYNDE-NNWCWBAJSA-N",
+      "doi": "10.1016/j.phytochem.2014.04.013"
+    },
+    {
+      "compound_name": "Arteannuin B",
+      "smiles": "CC1CCC2C(=C)C(=O)OC23C1CCC4(C3O4)C",
+      "inchi_key": "QWQSMEDUZQDVLA-KPHNHPKPSA-N",
+      "doi": "10.1016/S0031-9422(00)80540-X"
+    },
+    {
+      "compound_name": "Scopoletin",
+      "smiles": "COC1=C(C=C2C(=C1)C=CC(=O)O2)O",
+      "inchi_key": "RODXRVNMMDRFIK-UHFFFAOYSA-N",
+      "doi": "10.1016/j.phytochem.2017.09.006"
+    },
+    {
+      "compound_name": "Chrysosplenol D",
+      "smiles": "COC1=C(C(=C2C(=C1)OC(=C(C2=O)OC)C3=CC(=C(C=C3)O)O)O)OC",
+      "inchi_key": "BYWLLSQTJBXAPV-UHFFFAOYSA-N",
+      "doi": "10.1016/j.jep.2011.04.051"
+    }
+  ],
+  "Symphytum officinale": [
+    {
+      "compound_name": "Allantoin",
+      "smiles": "C1(C(=O)NC(=O)N1)NC(=O)N",
+      "inchi_key": "POJWUDADGALRAB-UHFFFAOYSA-N",
+      "doi": "10.1016/j.jep.2012.04.011"
+    },
+    {
+      "compound_name": "Rosmarinic acid",
+      "smiles": "C1=CC(=C(C=C1CC(C(=O)O)OC(=O)C=CC2=CC(=C(C=C2)O)O)O)O",
+      "inchi_key": "DOUMFZQKYFQNTF-WUTVXBCWSA-N",
+      "doi": "10.1016/j.phytochem.2015.02.013"
+    },
+    {
+      "compound_name": "Symphytine",
+      "smiles": "CC=C(C)C(=O)OC1CCN2C1C(=CC2)COC(=O)C(C(C)C)(C(C)O)O",
+      "inchi_key": "MVWPTZQHBOWRTF-SMLWLWDZSA-N",
+      "doi": "10.1016/j.fct.2018.06.024"
+    },
+    {
+      "compound_name": "Echimidine",
+      "smiles": "CC=C(C)C(=O)OC1CCN2C1C(=CC2)COC(=O)C(C(C)O)(C(C)(C)O)O",
+      "inchi_key": "HRSGCYGUWHGOPY-LYHHMGRNSA-N",
+      "doi": "10.1016/j.toxlet.2019.01.008"
+    }
+  ]
+}
+

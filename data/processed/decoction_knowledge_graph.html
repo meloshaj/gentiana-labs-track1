@@ -1,0 +1,163 @@
+<html>
+    <head>
+        <meta charset="utf-8">
+        
+            <script src="lib/bindings/utils.js"></script>
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/dist/vis-network.min.css" integrity="sha512-WgxfT5LWjfszlPHXRmBWHkV2eceiWTOBvrKCNbdgDYTHrT2AeLCGbF4sZlZw3UMN3WtL0tGUoIAKsu8mllg/XA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/vis-network.min.js" integrity="sha512-LnvoEWDFrqGHlHmDD2101OrLcbsfkrzoSpvtSQtxK3RMnRV0eOkhhBN2dXHKRrUU8p2DGRTk35n4O8nWSVe1mQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+            
+        
+<center>
+<h1></h1>
+</center>
+
+<!-- <link rel="stylesheet" href="../node_modules/vis/dist/vis.min.css" type="text/css" />
+<script type="text/javascript" src="../node_modules/vis/dist/vis.js"> </script>-->
+        <link
+          href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/css/bootstrap.min.css"
+          rel="stylesheet"
+          integrity="sha384-eOJMYsd53ii+scO/bJGFsiCZc+5NDVN2yr8+0RDqr0Ql0h+rP48ckxlpbzKgwra6"
+          crossorigin="anonymous"
+        />
+        <script
+          src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/js/bootstrap.bundle.min.js"
+          integrity="sha384-JEW9xMcG8R+pH31jmWH6WWP0WintQrMb4s7ZOdauHnUtxwoG2vI5DkLtS3qm9Ekf"
+          crossorigin="anonymous"
+        ></script>
+
+
+        <center>
+          <h1></h1>
+        </center>
+        <style type="text/css">
+
+             #mynetwork {
+                 width: 100%;
+                 height: 850px;
+                 background-color: #ffffff;
+                 border: 1px solid lightgray;
+                 position: relative;
+                 float: left;
+             }
+
+             
+
+             
+
+             
+        </style>
+    </head>
+
+
+    <body>
+        <div class="card" style="width: 100%">
+            
+            
+            <div id="mynetwork" class="card-body"></div>
+        </div>
+
+        
+        
+
+        <script type="text/javascript">
+
+              // initialize global variables.
+              var edges;
+              var nodes;
+              var allNodes;
+              var allEdges;
+              var nodeColors;
+              var originalNodes;
+              var network;
+              var container;
+              var options, data;
+              var filter = {
+                  item : '',
+                  property : '',
+                  value : []
+              };
+
+              
+
+              
+
+              // This method is responsible for drawing the graph, returns the drawn network
+              function drawGraph() {
+                  var container = document.getElementById('mynetwork');
+
+                  
+
+                  // parsing and collecting nodes and edges from the python
+                  nodes = new vis.DataSet([{"color": "#2E7D32", "id": "plant:Hypericum perforatum L.", "label": "Hypericum perforatum L.", "shape": "dot", "size": 28, "title": "\u003cb\u003eBotanical Taxon\u003c/b\u003e\u003cbr\u003eScientific Name: Hypericum perforatum L.\u003cbr\u003eVernacular Name: Hypericum perforatum\u003cbr\u003eGBIF Key: 3189486\u003cbr\u003eTaxon Rank: species\u003cbr\u003eMatching Confidence: 1.00"}, {"color": "#1565C0", "id": "prep:Hypericum perforatum L.:flower:oil_maceration:lipid_oil:warm_steep", "label": "oil_maceration\n(lipid_oil, warm_steep)", "shape": "diamond", "size": 24, "title": "\u003cb\u003eEthnobotanical Preparation\u003c/b\u003e\u003cbr\u003eType: oil_maceration\u003cbr\u003eSolvent Class: lipid_oil\u003cbr\u003eThermal Regime: warm_steep\u003cbr\u003ePlant Part: flower\u003cbr\u003eRoute: topical\u003cbr\u003eQuote: \u003ci\u003e\"Flowering tops steeped in olive oil under sunlight for 40 days to heal skin wounds and burns.\"\u003c/i\u003e"}, {"color": "#E65100", "id": "indication:severe burns, abrasions, and skin wounds", "label": "severe burns, abrasions, and skin wounds", "shape": "star", "size": 22, "title": "\u003cb\u003eMedical Indication\u003c/b\u003e\u003cbr\u003eAilment: severe burns, abrasions, and skin wounds\u003cbr\u003eMeSH: Wounds and Injuries [MeSH: D014947]"}, {"color": "#1565C0", "id": "prep:Hypericum perforatum L.:leaf:decoction:water:boiling_prolonged", "label": "decoction\n(water, boiling_prolonged)", "shape": "diamond", "size": 24, "title": "\u003cb\u003eEthnobotanical Preparation\u003c/b\u003e\u003cbr\u003eType: decoction\u003cbr\u003eSolvent Class: water\u003cbr\u003eThermal Regime: boiling_prolonged\u003cbr\u003ePlant Part: leaf\u003cbr\u003eRoute: oral\u003cbr\u003eQuote: \u003ci\u003e\"Dried leaves boiled in water for 15 minutes to treat nervous anxiety and melancholy.\"\u003c/i\u003e"}, {"color": "#E65100", "id": "indication:melancholia and nervous anxiety", "label": "melancholia and nervous anxiety", "shape": "star", "size": 22, "title": "\u003cb\u003eMedical Indication\u003c/b\u003e\u003cbr\u003eAilment: melancholia and nervous anxiety\u003cbr\u003eMeSH: Anxiety Disorders [MeSH: D001008] / Depressive Disorder [MeSH: D003866]"}, {"color": "#2E7D32", "id": "plant:Symphytum officinale L.", "label": "Symphytum officinale L.", "shape": "dot", "size": 28, "title": "\u003cb\u003eBotanical Taxon\u003c/b\u003e\u003cbr\u003eScientific Name: Symphytum officinale L.\u003cbr\u003eVernacular Name: Symphytum officinale\u003cbr\u003eGBIF Key: 7558421\u003cbr\u003eTaxon Rank: species\u003cbr\u003eMatching Confidence: 1.00"}, {"color": "#1565C0", "id": "prep:Symphytum officinale L.:root:decoction:water:boiling_prolonged", "label": "decoction\n(water, boiling_prolonged)", "shape": "diamond", "size": 24, "title": "\u003cb\u003eEthnobotanical Preparation\u003c/b\u003e\u003cbr\u003eType: decoction\u003cbr\u003eSolvent Class: water\u003cbr\u003eThermal Regime: boiling_prolonged\u003cbr\u003ePlant Part: root\u003cbr\u003eRoute: topical\u003cbr\u003eQuote: \u003ci\u003e\"Comfrey roots boiled in water to form a viscous glue applied over broken bones.\"\u003c/i\u003e"}, {"color": "#E65100", "id": "indication:bone fractures and severe bruising", "label": "bone fractures and severe bruising", "shape": "star", "size": 22, "title": "\u003cb\u003eMedical Indication\u003c/b\u003e\u003cbr\u003eAilment: bone fractures and severe bruising\u003cbr\u003eMeSH: Historical Medical Indication [Unclassified]"}, {"color": "#7B1FA2", "id": "compound:KGSZHKRKHXOAMG-UHFFFAOYSA-N", "label": "Hyperforin", "shape": "dot", "size": 16, "title": "\u003cb\u003eSecondary Metabolite\u003c/b\u003e\u003cbr\u003eCompound: Hyperforin\u003cbr\u003eFormula: C35H52O4\u003cbr\u003eMW: 536.8 Da | cLogP: 8.99 | TPSA: 71.44 \u00c5\u00b2\u003cbr\u003eMax Plausibility: 0.9037\u003cbr\u003eInChIKey: KGSZHKRKHXOAMG-UHFFFAOYSA-N"}, {"color": "#7B1FA2", "id": "compound:IKGXIBQEEMLURG-UHFFFAOYSA-N", "label": "Rutin", "shape": "dot", "size": 16, "title": "\u003cb\u003eSecondary Metabolite\u003c/b\u003e\u003cbr\u003eCompound: Rutin\u003cbr\u003eFormula: C27H30O16\u003cbr\u003eMW: 610.52 Da | cLogP: -1.69 | TPSA: 269.43 \u00c5\u00b2\u003cbr\u003eMax Plausibility: 1.0000\u003cbr\u003eInChIKey: IKGXIBQEEMLURG-UHFFFAOYSA-N"}, {"color": "#7B1FA2", "id": "compound:REFJWTPEDVJJIY-UHFFFAOYSA-N", "label": "Quercetin", "shape": "dot", "size": 16, "title": "\u003cb\u003eSecondary Metabolite\u003c/b\u003e\u003cbr\u003eCompound: Quercetin\u003cbr\u003eFormula: C15H10O7\u003cbr\u003eMW: 302.24 Da | cLogP: 1.99 | TPSA: 131.36 \u00c5\u00b2\u003cbr\u003eMax Plausibility: 1.0000\u003cbr\u003eInChIKey: REFJWTPEDVJJIY-UHFFFAOYSA-N"}, {"color": "#7B1FA2", "id": "compound:CWVRJTMFETXNAD-UHFFFAOYSA-N", "label": "Chlorogenic acid", "shape": "dot", "size": 16, "title": "\u003cb\u003eSecondary Metabolite\u003c/b\u003e\u003cbr\u003eCompound: Chlorogenic acid\u003cbr\u003eFormula: C16H18O9\u003cbr\u003eMW: 354.31 Da | cLogP: -0.65 | TPSA: 164.75 \u00c5\u00b2\u003cbr\u003eMax Plausibility: 1.0000\u003cbr\u003eInChIKey: CWVRJTMFETXNAD-UHFFFAOYSA-N"}, {"color": "#7B1FA2", "id": "compound:POJWUDADGALRAB-UHFFFAOYSA-N", "label": "Allantoin", "shape": "dot", "size": 16, "title": "\u003cb\u003eSecondary Metabolite\u003c/b\u003e\u003cbr\u003eCompound: Allantoin\u003cbr\u003eFormula: C4H6N4O3\u003cbr\u003eMW: 158.12 Da | cLogP: -2.18 | TPSA: 113.32 \u00c5\u00b2\u003cbr\u003eMax Plausibility: 1.0000\u003cbr\u003eInChIKey: POJWUDADGALRAB-UHFFFAOYSA-N"}, {"color": "#7B1FA2", "id": "compound:DOUMFZQKYFQNTF-UHFFFAOYSA-N", "label": "Rosmarinic acid", "shape": "dot", "size": 16, "title": "\u003cb\u003eSecondary Metabolite\u003c/b\u003e\u003cbr\u003eCompound: Rosmarinic acid\u003cbr\u003eFormula: C18H16O8\u003cbr\u003eMW: 360.32 Da | cLogP: 1.76 | TPSA: 144.52 \u00c5\u00b2\u003cbr\u003eMax Plausibility: 1.0000\u003cbr\u003eInChIKey: DOUMFZQKYFQNTF-UHFFFAOYSA-N"}, {"color": "#C62828", "id": "compound:MVWPTZQHBOWRTF-UHFFFAOYSA-N", "label": "Symphytine", "shape": "triangle", "size": 18, "title": "\u003cb\u003eSecondary Metabolite\u003c/b\u003e\u003cbr\u003eCompound: Symphytine\u003cbr\u003eFormula: C20H31NO6\u003cbr\u003eMW: 381.47 Da | cLogP: 1.19 | TPSA: 96.3 \u00c5\u00b2\u003cbr\u003eMax Plausibility: 1.0000\u003cbr\u003e\u003cspan style=\u0027color:red;\u0027\u003eALERTS: pyrrolizidine_alkaloid\u003c/span\u003e\u003cbr\u003eInChIKey: MVWPTZQHBOWRTF-UHFFFAOYSA-N"}, {"color": "#C62828", "id": "compound:HRSGCYGUWHGOPY-UHFFFAOYSA-N", "label": "Echimidine", "shape": "triangle", "size": 18, "title": "\u003cb\u003eSecondary Metabolite\u003c/b\u003e\u003cbr\u003eCompound: Echimidine\u003cbr\u003eFormula: C20H31NO7\u003cbr\u003eMW: 397.47 Da | cLogP: 0.3 | TPSA: 116.53 \u00c5\u00b2\u003cbr\u003eMax Plausibility: 1.0000\u003cbr\u003e\u003cspan style=\u0027color:red;\u0027\u003eALERTS: pyrrolizidine_alkaloid\u003c/span\u003e\u003cbr\u003eInChIKey: HRSGCYGUWHGOPY-UHFFFAOYSA-N"}]);
+                  edges = new vis.DataSet([{"arrows": "to", "color": "#1565C0", "from": "plant:Hypericum perforatum L.", "label": "HAS_PREPARATION", "title": "HAS_PREPARATION (Confidence: 0.98)", "to": "prep:Hypericum perforatum L.:flower:oil_maceration:lipid_oil:warm_steep"}, {"arrows": "to", "color": "#1565C0", "from": "plant:Hypericum perforatum L.", "label": "HAS_PREPARATION", "title": "HAS_PREPARATION (Confidence: 0.99)", "to": "prep:Hypericum perforatum L.:leaf:decoction:water:boiling_prolonged"}, {"arrows": "to", "color": "#E65100", "from": "prep:Hypericum perforatum L.:flower:oil_maceration:lipid_oil:warm_steep", "label": "TREATS (topical)", "title": "TREATS (topical)", "to": "indication:severe burns, abrasions, and skin wounds"}, {"arrows": "to", "color": "#7B1FA2", "from": "prep:Hypericum perforatum L.:flower:oil_maceration:lipid_oil:warm_steep", "label": "0.90 [high]", "title": "SOLUBILIZES (Score: 0.9037, Verdict: high)", "to": "compound:KGSZHKRKHXOAMG-UHFFFAOYSA-N"}, {"arrows": "to", "color": "#E65100", "from": "prep:Hypericum perforatum L.:leaf:decoction:water:boiling_prolonged", "label": "TREATS (oral)", "title": "TREATS (oral)", "to": "indication:melancholia and nervous anxiety"}, {"arrows": "to", "color": "#7B1FA2", "from": "prep:Hypericum perforatum L.:leaf:decoction:water:boiling_prolonged", "label": "1.00 [high]", "title": "SOLUBILIZES (Score: 1.0000, Verdict: high)", "to": "compound:IKGXIBQEEMLURG-UHFFFAOYSA-N"}, {"arrows": "to", "color": "#7B1FA2", "from": "prep:Hypericum perforatum L.:leaf:decoction:water:boiling_prolonged", "label": "1.00 [high]", "title": "SOLUBILIZES (Score: 1.0000, Verdict: high)", "to": "compound:REFJWTPEDVJJIY-UHFFFAOYSA-N"}, {"arrows": "to", "color": "#7B1FA2", "from": "prep:Hypericum perforatum L.:leaf:decoction:water:boiling_prolonged", "label": "1.00 [high]", "title": "SOLUBILIZES (Score: 1.0000, Verdict: high)", "to": "compound:CWVRJTMFETXNAD-UHFFFAOYSA-N"}, {"arrows": "to", "color": "#1565C0", "from": "plant:Symphytum officinale L.", "label": "HAS_PREPARATION", "title": "HAS_PREPARATION (Confidence: 0.96)", "to": "prep:Symphytum officinale L.:root:decoction:water:boiling_prolonged"}, {"arrows": "to", "color": "#E65100", "from": "prep:Symphytum officinale L.:root:decoction:water:boiling_prolonged", "label": "TREATS (topical)", "title": "TREATS (topical)", "to": "indication:bone fractures and severe bruising"}, {"arrows": "to", "color": "#7B1FA2", "from": "prep:Symphytum officinale L.:root:decoction:water:boiling_prolonged", "label": "1.00 [high]", "title": "SOLUBILIZES (Score: 1.0000, Verdict: high)", "to": "compound:POJWUDADGALRAB-UHFFFAOYSA-N"}, {"arrows": "to", "color": "#7B1FA2", "from": "prep:Symphytum officinale L.:root:decoction:water:boiling_prolonged", "label": "1.00 [high]", "title": "SOLUBILIZES (Score: 1.0000, Verdict: high)", "to": "compound:DOUMFZQKYFQNTF-UHFFFAOYSA-N"}, {"arrows": "to", "color": "#7B1FA2", "from": "prep:Symphytum officinale L.:root:decoction:water:boiling_prolonged", "label": "1.00 [high]", "title": "SOLUBILIZES (Score: 1.0000, Verdict: high)", "to": "compound:MVWPTZQHBOWRTF-UHFFFAOYSA-N"}, {"arrows": "to", "color": "#7B1FA2", "from": "prep:Symphytum officinale L.:root:decoction:water:boiling_prolonged", "label": "1.00 [high]", "title": "SOLUBILIZES (Score: 1.0000, Verdict: high)", "to": "compound:HRSGCYGUWHGOPY-UHFFFAOYSA-N"}]);
+
+                  nodeColors = {};
+                  allNodes = nodes.get({ returnType: "Object" });
+                  for (nodeId in allNodes) {
+                    nodeColors[nodeId] = allNodes[nodeId].color;
+                  }
+                  allEdges = edges.get({ returnType: "Object" });
+                  // adding nodes and edges to the graph
+                  data = {nodes: nodes, edges: edges};
+
+                  var options = {
+    "configure": {
+        "enabled": false
+    },
+    "edges": {
+        "color": {
+            "inherit": true
+        },
+        "smooth": {
+            "enabled": true,
+            "type": "dynamic"
+        }
+    },
+    "interaction": {
+        "dragNodes": true,
+        "hideEdgesOnDrag": false,
+        "hideNodesOnDrag": false
+    },
+    "physics": {
+        "barnesHut": {
+            "avoidOverlap": 0,
+            "centralGravity": 0.3,
+            "damping": 0.09,
+            "gravitationalConstant": -3000,
+            "springConstant": 0.001,
+            "springLength": 120
+        },
+        "enabled": true,
+        "stabilization": {
+            "enabled": true,
+            "fit": true,
+            "iterations": 1000,
+            "onlyDynamicEdges": false,
+            "updateInterval": 50
+        }
+    }
+};
+
+                  
+
+
+                  
+
+                  network = new vis.Network(container, data, options);
+
+                  
+
+                  
+
+                  
+
+
+                  
+
+                  return network;
+
+              }
+              drawGraph();
+        </script>
+    </body>
+</html>

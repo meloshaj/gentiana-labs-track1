@@ -1,0 +1,472 @@
+{
+  "directed": true,
+  "multigraph": true,
+  "graph": {},
+  "nodes": [
+    {
+      "node_type": "plant",
+      "label": "Hypericum perforatum L.",
+      "scientific_name": "Hypericum perforatum L.",
+      "gbif_key": 3189486,
+      "vernacular_name": "Hypericum perforatum",
+      "confidence": 1.0,
+      "taxon_rank": "species",
+      "taxonomic_status": "ACCEPTED",
+      "is_resolved": true,
+      "id": "plant:Hypericum perforatum L."
+    },
+    {
+      "node_type": "preparation",
+      "label": "oil_maceration\n(lipid_oil, warm_steep)",
+      "prep_type": "oil_maceration",
+      "solvent": "lipid_oil",
+      "thermal": "warm_steep",
+      "part": "flower",
+      "route": "topical",
+      "quote": "Flowering tops steeped in olive oil under sunlight for 40 days to heal skin wounds and burns.",
+      "confidence": 0.98,
+      "origin": "Mediterranean",
+      "ambiguity_notes": null,
+      "id": "prep:Hypericum perforatum L.:flower:oil_maceration:lipid_oil:warm_steep"
+    },
+    {
+      "node_type": "indication",
+      "label": "severe burns, abrasions, and skin wounds",
+      "verbatim_indication": "severe burns, abrasions, and skin wounds",
+      "modern_mesh_mapping": "Wounds and Injuries [MeSH: D014947]",
+      "id": "indication:severe burns, abrasions, and skin wounds"
+    },
+    {
+      "node_type": "preparation",
+      "label": "decoction\n(water, boiling_prolonged)",
+      "prep_type": "decoction",
+      "solvent": "water",
+      "thermal": "boiling_prolonged",
+      "part": "leaf",
+      "route": "oral",
+      "quote": "Dried leaves boiled in water for 15 minutes to treat nervous anxiety and melancholy.",
+      "confidence": 0.99,
+      "origin": "Mediterranean",
+      "ambiguity_notes": null,
+      "id": "prep:Hypericum perforatum L.:leaf:decoction:water:boiling_prolonged"
+    },
+    {
+      "node_type": "indication",
+      "label": "melancholia and nervous anxiety",
+      "verbatim_indication": "melancholia and nervous anxiety",
+      "modern_mesh_mapping": "Anxiety Disorders [MeSH: D001008] / Depressive Disorder [MeSH: D003866]",
+      "id": "indication:melancholia and nervous anxiety"
+    },
+    {
+      "node_type": "plant",
+      "label": "Symphytum officinale L.",
+      "scientific_name": "Symphytum officinale L.",
+      "gbif_key": 7558421,
+      "vernacular_name": "Symphytum officinale",
+      "confidence": 1.0,
+      "taxon_rank": "species",
+      "taxonomic_status": "ACCEPTED",
+      "is_resolved": true,
+      "id": "plant:Symphytum officinale L."
+    },
+    {
+      "node_type": "preparation",
+      "label": "decoction\n(water, boiling_prolonged)",
+      "prep_type": "decoction",
+      "solvent": "water",
+      "thermal": "boiling_prolonged",
+      "part": "root",
+      "route": "topical",
+      "quote": "Comfrey roots boiled in water to form a viscous glue applied over broken bones.",
+      "confidence": 0.96,
+      "origin": "European Folk Medicine",
+      "ambiguity_notes": null,
+      "id": "prep:Symphytum officinale L.:root:decoction:water:boiling_prolonged"
+    },
+    {
+      "node_type": "indication",
+      "label": "bone fractures and severe bruising",
+      "verbatim_indication": "bone fractures and severe bruising",
+      "modern_mesh_mapping": "Historical Medical Indication [Unclassified]",
+      "id": "indication:bone fractures and severe bruising"
+    },
+    {
+      "node_type": "compound",
+      "label": "Hyperforin",
+      "compound_name": "Hyperforin",
+      "smiles": "CC(C)=CCCC1(C)C(CC=C(C)C)CC2(CC=C(C)C)C(=O)C1(C(=O)C(C)C)C(=O)C(CC=C(C)C)=C2O",
+      "inchi_key": "KGSZHKRKHXOAMG-UHFFFAOYSA-N",
+      "molecular_formula": "C35H52O4",
+      "mw": 536.8,
+      "clogp": 8.99,
+      "tpsa": 71.44,
+      "is_thermolabile": false,
+      "is_volatile": false,
+      "toxicity_alerts": [],
+      "has_toxicity_alerts": false,
+      "doi": "10.1055/s-2003-40654",
+      "id": "compound:KGSZHKRKHXOAMG-UHFFFAOYSA-N"
+    },
+    {
+      "node_type": "compound",
+      "label": "Rutin",
+      "compound_name": "Rutin",
+      "smiles": "CC1OC(OCC2OC(Oc3c(-c4ccc(O)c(O)c4)oc4cc(O)cc(O)c4c3=O)C(O)C(O)C2O)C(O)C(O)C1O",
+      "inchi_key": "IKGXIBQEEMLURG-UHFFFAOYSA-N",
+      "molecular_formula": "C27H30O16",
+      "mw": 610.52,
+      "clogp": -1.69,
+      "tpsa": 269.43,
+      "is_thermolabile": false,
+      "is_volatile": false,
+      "toxicity_alerts": [],
+      "has_toxicity_alerts": false,
+      "doi": "10.1016/j.jep.2011.08.077",
+      "id": "compound:IKGXIBQEEMLURG-UHFFFAOYSA-N"
+    },
+    {
+      "node_type": "compound",
+      "label": "Quercetin",
+      "compound_name": "Quercetin",
+      "smiles": "O=c1c(O)c(-c2ccc(O)c(O)c2)oc2cc(O)cc(O)c12",
+      "inchi_key": "REFJWTPEDVJJIY-UHFFFAOYSA-N",
+      "molecular_formula": "C15H10O7",
+      "mw": 302.24,
+      "clogp": 1.99,
+      "tpsa": 131.36,
+      "is_thermolabile": false,
+      "is_volatile": false,
+      "toxicity_alerts": [],
+      "has_toxicity_alerts": false,
+      "doi": "10.1016/j.fitote.2019.104251",
+      "id": "compound:REFJWTPEDVJJIY-UHFFFAOYSA-N"
+    },
+    {
+      "node_type": "compound",
+      "label": "Chlorogenic acid",
+      "compound_name": "Chlorogenic acid",
+      "smiles": "O=C(C=Cc1ccc(O)c(O)c1)OC1CC(O)(C(=O)O)CC(O)C1O",
+      "inchi_key": "CWVRJTMFETXNAD-UHFFFAOYSA-N",
+      "molecular_formula": "C16H18O9",
+      "mw": 354.31,
+      "clogp": -0.65,
+      "tpsa": 164.75,
+      "is_thermolabile": false,
+      "is_volatile": false,
+      "toxicity_alerts": [],
+      "has_toxicity_alerts": false,
+      "doi": "10.1002/ptr.2612",
+      "id": "compound:CWVRJTMFETXNAD-UHFFFAOYSA-N"
+    },
+    {
+      "node_type": "compound",
+      "label": "Allantoin",
+      "compound_name": "Allantoin",
+      "smiles": "NC(=O)NC1NC(=O)NC1=O",
+      "inchi_key": "POJWUDADGALRAB-UHFFFAOYSA-N",
+      "molecular_formula": "C4H6N4O3",
+      "mw": 158.12,
+      "clogp": -2.18,
+      "tpsa": 113.32,
+      "is_thermolabile": false,
+      "is_volatile": false,
+      "toxicity_alerts": [],
+      "has_toxicity_alerts": false,
+      "doi": "10.1016/j.jep.2012.04.011",
+      "id": "compound:POJWUDADGALRAB-UHFFFAOYSA-N"
+    },
+    {
+      "node_type": "compound",
+      "label": "Rosmarinic acid",
+      "compound_name": "Rosmarinic acid",
+      "smiles": "O=C(C=Cc1ccc(O)c(O)c1)OC(Cc1ccc(O)c(O)c1)C(=O)O",
+      "inchi_key": "DOUMFZQKYFQNTF-UHFFFAOYSA-N",
+      "molecular_formula": "C18H16O8",
+      "mw": 360.32,
+      "clogp": 1.76,
+      "tpsa": 144.52,
+      "is_thermolabile": false,
+      "is_volatile": false,
+      "toxicity_alerts": [],
+      "has_toxicity_alerts": false,
+      "doi": "10.1016/j.phytochem.2015.02.013",
+      "id": "compound:DOUMFZQKYFQNTF-UHFFFAOYSA-N"
+    },
+    {
+      "node_type": "compound",
+      "label": "Symphytine",
+      "compound_name": "Symphytine",
+      "smiles": "CC=C(C)C(=O)OC1CCN2CC=C(COC(=O)C(O)(C(C)C)C(C)O)C12",
+      "inchi_key": "MVWPTZQHBOWRTF-UHFFFAOYSA-N",
+      "molecular_formula": "C20H31NO6",
+      "mw": 381.47,
+      "clogp": 1.19,
+      "tpsa": 96.3,
+      "is_thermolabile": false,
+      "is_volatile": false,
+      "toxicity_alerts": [
+        "pyrrolizidine_alkaloid"
+      ],
+      "has_toxicity_alerts": true,
+      "doi": "10.1016/j.fct.2018.06.024",
+      "id": "compound:MVWPTZQHBOWRTF-UHFFFAOYSA-N"
+    },
+    {
+      "node_type": "compound",
+      "label": "Echimidine",
+      "compound_name": "Echimidine",
+      "smiles": "CC=C(C)C(=O)OC1CCN2CC=C(COC(=O)C(O)(C(C)O)C(C)(C)O)C12",
+      "inchi_key": "HRSGCYGUWHGOPY-UHFFFAOYSA-N",
+      "molecular_formula": "C20H31NO7",
+      "mw": 397.47,
+      "clogp": 0.3,
+      "tpsa": 116.53,
+      "is_thermolabile": false,
+      "is_volatile": false,
+      "toxicity_alerts": [
+        "pyrrolizidine_alkaloid"
+      ],
+      "has_toxicity_alerts": true,
+      "doi": "10.1016/j.toxlet.2019.01.008",
+      "id": "compound:HRSGCYGUWHGOPY-UHFFFAOYSA-N"
+    }
+  ],
+  "edges": [
+    {
+      "edge_type": "HAS_PREPARATION",
+      "quote": "Flowering tops steeped in olive oil under sunlight for 40 days to heal skin wounds and burns.",
+      "source": "plant:Hypericum perforatum L.",
+      "confidence": 0.98,
+      "target": "prep:Hypericum perforatum L.:flower:oil_maceration:lipid_oil:warm_steep",
+      "key": "HAS_PREP_prep:Hypericum perforatum L.:flower:oil_maceration:lipid_oil:warm_steep"
+    },
+    {
+      "edge_type": "HAS_PREPARATION",
+      "quote": "Dried leaves boiled in water for 15 minutes to treat nervous anxiety and melancholy.",
+      "source": "plant:Hypericum perforatum L.",
+      "confidence": 0.99,
+      "target": "prep:Hypericum perforatum L.:leaf:decoction:water:boiling_prolonged",
+      "key": "HAS_PREP_prep:Hypericum perforatum L.:leaf:decoction:water:boiling_prolonged"
+    },
+    {
+      "edge_type": "TREATS",
+      "route": "topical",
+      "source": "prep:Hypericum perforatum L.:flower:oil_maceration:lipid_oil:warm_steep",
+      "target": "indication:severe burns, abrasions, and skin wounds",
+      "key": "TREATS_indication:severe burns, abrasions, and skin wounds"
+    },
+    {
+      "edge_type": "SOLUBILIZES",
+      "plausibility_score": 0.9037,
+      "status": "high",
+      "verdict": "high",
+      "source": "prep:Hypericum perforatum L.:flower:oil_maceration:lipid_oil:warm_steep",
+      "target": "compound:KGSZHKRKHXOAMG-UHFFFAOYSA-N",
+      "key": "SOLUBILIZES_KGSZHKRKHXOAMG-UHFFFAOYSA-N"
+    },
+    {
+      "edge_type": "TREATS",
+      "route": "oral",
+      "source": "prep:Hypericum perforatum L.:leaf:decoction:water:boiling_prolonged",
+      "target": "indication:melancholia and nervous anxiety",
+      "key": "TREATS_indication:melancholia and nervous anxiety"
+    },
+    {
+      "edge_type": "SOLUBILIZES",
+      "plausibility_score": 1.0,
+      "status": "high",
+      "verdict": "high",
+      "source": "prep:Hypericum perforatum L.:leaf:decoction:water:boiling_prolonged",
+      "target": "compound:IKGXIBQEEMLURG-UHFFFAOYSA-N",
+      "key": "SOLUBILIZES_IKGXIBQEEMLURG-UHFFFAOYSA-N"
+    },
+    {
+      "edge_type": "SOLUBILIZES",
+      "plausibility_score": 1.0,
+      "status": "high",
+      "verdict": "high",
+      "source": "prep:Hypericum perforatum L.:leaf:decoction:water:boiling_prolonged",
+      "target": "compound:REFJWTPEDVJJIY-UHFFFAOYSA-N",
+      "key": "SOLUBILIZES_REFJWTPEDVJJIY-UHFFFAOYSA-N"
+    },
+    {
+      "edge_type": "SOLUBILIZES",
+      "plausibility_score": 1.0,
+      "status": "high",
+      "verdict": "high",
+      "source": "prep:Hypericum perforatum L.:leaf:decoction:water:boiling_prolonged",
+      "target": "compound:CWVRJTMFETXNAD-UHFFFAOYSA-N",
+      "key": "SOLUBILIZES_CWVRJTMFETXNAD-UHFFFAOYSA-N"
+    },
+    {
+      "edge_type": "HAS_PREPARATION",
+      "quote": "Comfrey roots boiled in water to form a viscous glue applied over broken bones.",
+      "source": "plant:Symphytum officinale L.",
+      "confidence": 0.96,
+      "target": "prep:Symphytum officinale L.:root:decoction:water:boiling_prolonged",
+      "key": "HAS_PREP_prep:Symphytum officinale L.:root:decoction:water:boiling_prolonged"
+    },
+    {
+      "edge_type": "TREATS",
+      "route": "topical",
+      "source": "prep:Symphytum officinale L.:root:decoction:water:boiling_prolonged",
+      "target": "indication:bone fractures and severe bruising",
+      "key": "TREATS_indication:bone fractures and severe bruising"
+    },
+    {
+      "edge_type": "SOLUBILIZES",
+      "plausibility_score": 1.0,
+      "status": "high",
+      "verdict": "high",
+      "source": "prep:Symphytum officinale L.:root:decoction:water:boiling_prolonged",
+      "target": "compound:POJWUDADGALRAB-UHFFFAOYSA-N",
+      "key": "SOLUBILIZES_POJWUDADGALRAB-UHFFFAOYSA-N"
+    },
+    {
+      "edge_type": "SOLUBILIZES",
+      "plausibility_score": 1.0,
+      "status": "high",
+      "verdict": "high",
+      "source": "prep:Symphytum officinale L.:root:decoction:water:boiling_prolonged",
+      "target": "compound:DOUMFZQKYFQNTF-UHFFFAOYSA-N",
+      "key": "SOLUBILIZES_DOUMFZQKYFQNTF-UHFFFAOYSA-N"
+    },
+    {
+      "edge_type": "SOLUBILIZES",
+      "plausibility_score": 1.0,
+      "status": "high",
+      "verdict": "high",
+      "source": "prep:Symphytum officinale L.:root:decoction:water:boiling_prolonged",
+      "target": "compound:MVWPTZQHBOWRTF-UHFFFAOYSA-N",
+      "key": "SOLUBILIZES_MVWPTZQHBOWRTF-UHFFFAOYSA-N"
+    },
+    {
+      "edge_type": "SOLUBILIZES",
+      "plausibility_score": 1.0,
+      "status": "high",
+      "verdict": "high",
+      "source": "prep:Symphytum officinale L.:root:decoction:water:boiling_prolonged",
+      "target": "compound:HRSGCYGUWHGOPY-UHFFFAOYSA-N",
+      "key": "SOLUBILIZES_HRSGCYGUWHGOPY-UHFFFAOYSA-N"
+    }
+  ],
+  "links": [
+    {
+      "edge_type": "HAS_PREPARATION",
+      "quote": "Flowering tops steeped in olive oil under sunlight for 40 days to heal skin wounds and burns.",
+      "source": "plant:Hypericum perforatum L.",
+      "confidence": 0.98,
+      "target": "prep:Hypericum perforatum L.:flower:oil_maceration:lipid_oil:warm_steep",
+      "key": "HAS_PREP_prep:Hypericum perforatum L.:flower:oil_maceration:lipid_oil:warm_steep"
+    },
+    {
+      "edge_type": "HAS_PREPARATION",
+      "quote": "Dried leaves boiled in water for 15 minutes to treat nervous anxiety and melancholy.",
+      "source": "plant:Hypericum perforatum L.",
+      "confidence": 0.99,
+      "target": "prep:Hypericum perforatum L.:leaf:decoction:water:boiling_prolonged",
+      "key": "HAS_PREP_prep:Hypericum perforatum L.:leaf:decoction:water:boiling_prolonged"
+    },
+    {
+      "edge_type": "TREATS",
+      "route": "topical",
+      "source": "prep:Hypericum perforatum L.:flower:oil_maceration:lipid_oil:warm_steep",
+      "target": "indication:severe burns, abrasions, and skin wounds",
+      "key": "TREATS_indication:severe burns, abrasions, and skin wounds"
+    },
+    {
+      "edge_type": "SOLUBILIZES",
+      "plausibility_score": 0.9037,
+      "status": "high",
+      "verdict": "high",
+      "source": "prep:Hypericum perforatum L.:flower:oil_maceration:lipid_oil:warm_steep",
+      "target": "compound:KGSZHKRKHXOAMG-UHFFFAOYSA-N",
+      "key": "SOLUBILIZES_KGSZHKRKHXOAMG-UHFFFAOYSA-N"
+    },
+    {
+      "edge_type": "TREATS",
+      "route": "oral",
+      "source": "prep:Hypericum perforatum L.:leaf:decoction:water:boiling_prolonged",
+      "target": "indication:melancholia and nervous anxiety",
+      "key": "TREATS_indication:melancholia and nervous anxiety"
+    },
+    {
+      "edge_type": "SOLUBILIZES",
+      "plausibility_score": 1.0,
+      "status": "high",
+      "verdict": "high",
+      "source": "prep:Hypericum perforatum L.:leaf:decoction:water:boiling_prolonged",
+      "target": "compound:IKGXIBQEEMLURG-UHFFFAOYSA-N",
+      "key": "SOLUBILIZES_IKGXIBQEEMLURG-UHFFFAOYSA-N"
+    },
+    {
+      "edge_type": "SOLUBILIZES",
+      "plausibility_score": 1.0,
+      "status": "high",
+      "verdict": "high",
+      "source": "prep:Hypericum perforatum L.:leaf:decoction:water:boiling_prolonged",
+      "target": "compound:REFJWTPEDVJJIY-UHFFFAOYSA-N",
+      "key": "SOLUBILIZES_REFJWTPEDVJJIY-UHFFFAOYSA-N"
+    },
+    {
+      "edge_type": "SOLUBILIZES",
+      "plausibility_score": 1.0,
+      "status": "high",
+      "verdict": "high",
+      "source": "prep:Hypericum perforatum L.:leaf:decoction:water:boiling_prolonged",
+      "target": "compound:CWVRJTMFETXNAD-UHFFFAOYSA-N",
+      "key": "SOLUBILIZES_CWVRJTMFETXNAD-UHFFFAOYSA-N"
+    },
+    {
+      "edge_type": "HAS_PREPARATION",
+      "quote": "Comfrey roots boiled in water to form a viscous glue applied over broken bones.",
+      "source": "plant:Symphytum officinale L.",
+      "confidence": 0.96,
+      "target": "prep:Symphytum officinale L.:root:decoction:water:boiling_prolonged",
+      "key": "HAS_PREP_prep:Symphytum officinale L.:root:decoction:water:boiling_prolonged"
+    },
+    {
+      "edge_type": "TREATS",
+      "route": "topical",
+      "source": "prep:Symphytum officinale L.:root:decoction:water:boiling_prolonged",
+      "target": "indication:bone fractures and severe bruising",
+      "key": "TREATS_indication:bone fractures and severe bruising"
+    },
+    {
+      "edge_type": "SOLUBILIZES",
+      "plausibility_score": 1.0,
+      "status": "high",
+      "verdict": "high",
+      "source": "prep:Symphytum officinale L.:root:decoction:water:boiling_prolonged",
+      "target": "compound:POJWUDADGALRAB-UHFFFAOYSA-N",
+      "key": "SOLUBILIZES_POJWUDADGALRAB-UHFFFAOYSA-N"
+    },
+    {
+      "edge_type": "SOLUBILIZES",
+      "plausibility_score": 1.0,
+      "status": "high",
+      "verdict": "high",
+      "source": "prep:Symphytum officinale L.:root:decoction:water:boiling_prolonged",
+      "target": "compound:DOUMFZQKYFQNTF-UHFFFAOYSA-N",
+      "key": "SOLUBILIZES_DOUMFZQKYFQNTF-UHFFFAOYSA-N"
+    },
+    {
+      "edge_type": "SOLUBILIZES",
+      "plausibility_score": 1.0,
+      "status": "high",
+      "verdict": "high",
+      "source": "prep:Symphytum officinale L.:root:decoction:water:boiling_prolonged",
+      "target": "compound:MVWPTZQHBOWRTF-UHFFFAOYSA-N",
+      "key": "SOLUBILIZES_MVWPTZQHBOWRTF-UHFFFAOYSA-N"
+    },
+    {
+      "edge_type": "SOLUBILIZES",
+      "plausibility_score": 1.0,
+      "status": "high",
+      "verdict": "high",
+      "source": "prep:Symphytum officinale L.:root:decoction:water:boiling_prolonged",
+      "target": "compound:HRSGCYGUWHGOPY-UHFFFAOYSA-N",
+      "key": "SOLUBILIZES_HRSGCYGUWHGOPY-UHFFFAOYSA-N"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "description": "A bootstrapping and verification tool that prepares imported projects for deployment, helping developers validate setup and preview readiness.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

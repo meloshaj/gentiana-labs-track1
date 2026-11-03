@@ -1,0 +1,82 @@
+{
+  "Gentiana lutea": {
+    "queried_name": "Gentiana lutea",
+    "accepted_scientific_name": "Gentiana lutea L.",
+    "taxon_rank": "species",
+    "taxonomic_status": "ACCEPTED",
+    "gbif_usage_key": 3170040,
+    "confidence": 0.99,
+    "match_type": "EXACT",
+    "is_resolved": true
+  },
+  "Hypericum perforatum": {
+    "queried_name": "Hypericum perforatum",
+    "accepted_scientific_name": "Hypericum perforatum L.",
+    "taxon_rank": "species",
+    "taxonomic_status": "ACCEPTED",
+    "gbif_usage_key": 3189486,
+    "confidence": 1.0,
+    "match_type": "EXACT",
+    "is_resolved": true
+  },
+  "Artemisia annua": {
+    "queried_name": "Artemisia annua",
+    "accepted_scientific_name": "Artemisia annua L.",
+    "taxon_rank": "species",
+    "taxonomic_status": "ACCEPTED",
+    "gbif_usage_key": 8373355,
+    "confidence": 0.99,
+    "match_type": "EXACT",
+    "is_resolved": true
+  },
+  "Hypericon": {
+    "queried_name": "Hypericon",
+    "accepted_scientific_name": "Hypericon J.F.Gmel.",
+    "taxon_rank": "genus",
+    "taxonomic_status": "SYNONYM",
+    "gbif_usage_key": 3711518,
+    "confidence": 0.96,
+    "match_type": "EXACT",
+    "is_resolved": true
+  },
+  "Kantarion": {
+    "queried_name": "Kantarion",
+    "accepted_scientific_name": "Hypericum perforatum L.",
+    "taxon_rank": "species",
+    "taxonomic_status": "ACCEPTED",
+    "gbif_usage_key": 3189486,
+    "confidence": 1.0,
+    "match_type": "VERNACULAR_GBIF",
+    "is_resolved": true
+  },
+  "Lincurë": {
+    "queried_name": "Lincurë",
+    "accepted_scientific_name": "Gentiana lutea L.",
+    "taxon_rank": "species",
+    "taxonomic_status": "ACCEPTED",
+    "gbif_usage_key": 3170040,
+    "confidence": 1.0,
+    "match_type": "VERNACULAR_GBIF",
+    "is_resolved": true
+  },
+  "Pelini": {
+    "queried_name": "Pelini",
+    "accepted_scientific_name": "Artemisia absinthium L.",
+    "taxon_rank": "species",
+    "taxonomic_status": "ACCEPTED",
+    "gbif_usage_key": 3121319,
+    "confidence": 1.0,
+    "match_type": "VERNACULAR_GBIF",
+    "is_resolved": true
+  },
+  "Nonexistentia herbacea xyz": {
+    "queried_name": "Nonexistentia herbacea xyz",
+    "accepted_scientific_name": "Nonexistentia herbacea xyz",
+    "taxon_rank": "unknown",
+    "taxonomic_status": "UNRESOLVED",
+    "gbif_usage_key": null,
+    "confidence": 0.0,
+    "match_type": "NONE",
+    "is_resolved": false
+  }
+}
