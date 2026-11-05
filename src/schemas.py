@@ -91,6 +91,27 @@ ExtractionVerdict = Literal[
 """Physicochemical plausibility verdict regarding compound extractability."""
 extraction_verdict = ExtractionVerdict  # Alias conforming to lowercase type notation
 
+TargetActionType = Literal[
+    "agonist",
+    "antagonist",
+    "inhibitor",
+    "modulator",
+    "substrate",
+    "unknown",
+]
+"""Permitted pharmacological mechanisms of action on macromolecular protein targets."""
+target_action_type = TargetActionType  # Alias conforming to lowercase type notation
+
+AcidBaseClass = Literal[
+    "neutral",
+    "basic_alkaloid",
+    "weak_acid",
+    "phenolic",
+    "zwitterion",
+]
+"""Acid-base physicochemical classification governing ionization and logD equilibrium."""
+acid_base_class = AcidBaseClass  # Alias conforming to lowercase type notation
+
 # Runtime validation tuples / introspection sets
 PLANT_PARTS: Tuple[str, ...] = get_args(PlantPart)
 PREPARATION_TYPES: Tuple[str, ...] = get_args(PreparationType)
@@ -98,6 +119,8 @@ SOLVENT_CLASSES: Tuple[str, ...] = get_args(SolventClass)
 THERMAL_REGIMES: Tuple[str, ...] = get_args(ThermalRegime)
 ADMINISTRATION_ROUTES: Tuple[str, ...] = get_args(AdministrationRoute)
 EXTRACTION_VERDICTS: Tuple[str, ...] = get_args(ExtractionVerdict)
+TARGET_ACTION_TYPES: Tuple[str, ...] = get_args(TargetActionType)
+ACID_BASE_CLASSES: Tuple[str, ...] = get_args(AcidBaseClass)
 
 
 # ==============================================================================
@@ -190,6 +213,27 @@ class EthnoPreparationRecord(DecoctionBaseModel):
         description="NLP pipeline or annotator extraction confidence score bounded strictly between 0.0 and 1.0.",
         examples=[0.95],
     )
+    estimated_ph: float = Field(
+        default=7.0,
+        ge=1.0,
+        le=12.0,
+        description="Estimated pH of solvent: vinegar/sour wine ~3.0, water ~7.0, wood ash/lime ~9.5",
+        examples=[7.0, 3.0, 9.5],
+    )
+    duration_minutes: float = Field(
+        default=15.0,
+        ge=1.0,
+        le=10080.0,
+        description="Preparation contact or boiling time in minutes",
+        examples=[15.0, 60.0, 1440.0],
+    )
+    temperature_celsius: float = Field(
+        default=25.0,
+        ge=0.0,
+        le=250.0,
+        description="Extraction temperature in Celsius: ambient=25, warm_steep=80, boiling=100",
+        examples=[25.0, 80.0, 100.0],
+    )
     ambiguity_notes: Optional[str] = Field(
         default=None,
         description="Optional notes documenting orthographic, botanical, linguistic, or methodological ambiguities.",
@@ -251,6 +295,52 @@ class TaxonResolution(DecoctionBaseModel):
         ...,
         description="Boolean flag indicating whether the queried name was successfully aligned to an accepted scientific taxon.",
         examples=[True],
+    )
+
+
+class TargetMechanismRecord(DecoctionBaseModel):
+    """Macromolecular human protein target, bioactivity potency, and therapeutic pathway mapping."""
+
+    target_name: str = Field(
+        ...,
+        min_length=1,
+        description="Full descriptive name of macromolecular human protein or enzyme target.",
+        examples=["Transient receptor potential cation channel subfamily C member 6", "Cyclooxygenase-2"],
+    )
+    gene_symbol: str = Field(
+        ...,
+        min_length=1,
+        description="Standard HGNC / NCBI gene symbol for the target protein.",
+        examples=["TRPC6", "MAOA", "PTGS2"],
+    )
+    chembl_target_id: Optional[str] = Field(
+        default=None,
+        description="Unique identifier for the target in the ChEMBL database (e.g. 'CHEMBL4822').",
+        examples=["CHEMBL4822"],
+    )
+    action_type: TargetActionType = Field(
+        ...,
+        description="Pharmacological mechanism of action on the target protein.",
+        examples=["agonist", "antagonist", "inhibitor", "modulator", "substrate", "unknown"],
+    )
+    bioactivity_potency_um: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        description="Experimental or predicted bioactivity potency (IC50, EC50, or Ki) in micromolar.",
+        examples=[0.45, 12.0],
+    )
+    therapeutic_pathway: str = Field(
+        ...,
+        min_length=1,
+        description="Biological, physiological, or cellular pathway modulated by this target interaction.",
+        examples=["Keratinocyte proliferation & wound healing", "Monoamine turnover & neuroprotection"],
+    )
+    symptom_relevance_score: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Relevance score [0.0, 1.0] linking the modulated pathway to the historical indication.",
+        examples=[0.85],
     )
 
 
@@ -352,6 +442,57 @@ class PhytochemicalRecord(DecoctionBaseModel):
         description="Digital Object Identifier (DOI) or literature reference grounding this compound's presence in the botanical taxon.",
         examples=["10.1016/j.phytochem.2020.112456"],
     )
+    documented_organs: List[str] = Field(
+        default_factory=list,
+        description="Documented anatomical plant organs/parts where this compound accumulates.",
+        examples=[["flower", "aerial_parts"], ["root", "rhizome"]],
+    )
+    organ_match_factor: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="1.0 if present in prepared organ, 0.25 if whole plant/unknown, 0.05 if restricted to a different organ",
+        examples=[1.0, 0.25, 0.05],
+    )
+    acid_base_class: AcidBaseClass = Field(
+        default="neutral",
+        description="Acid-base classification determining ionization state at recipe pH.",
+        examples=["neutral", "basic_alkaloid", "weak_acid", "phenolic", "zwitterion"],
+    )
+    estimated_pka: Optional[float] = Field(
+        default=None,
+        description="Estimated primary ionization constant pKa.",
+        examples=[8.2, 4.5],
+    )
+    logd_at_recipe_ph: float = Field(
+        default=0.0,
+        description="pH-adjusted partition coefficient (logD).",
+        examples=[1.45],
+    )
+    thermal_half_life_min_at_100c: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        description="Thermal degradation half-life in minutes at 100°C.",
+        examples=[15.0],
+    )
+    thermal_survival_fraction: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Arrhenius remaining fraction exp(-k(T)*t)",
+        examples=[0.85],
+    )
+    known_targets: List[TargetMechanismRecord] = Field(
+        default_factory=list,
+        description="List of known or predicted macromolecular human protein targets modulated by this compound.",
+    )
+    mechanistic_alignment_score: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="How strongly this compound's targets explain the historical indication",
+        examples=[0.82],
+    )
 
     @field_validator("inchi_key")
     @classmethod
@@ -431,6 +572,13 @@ class EnrichedPlantGraph(DecoctionBaseModel):
         default_factory=list,
         description="Candidate phytochemical constituents linked to the plant taxon, scored for extraction plausibility.",
     )
+    overall_mechanistic_plausibility: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Combined score of solubilized bioactives hitting targets relevant to the historical symptom",
+        examples=[0.78],
+    )
     pipeline_metadata: Dict[str, Any] = Field(
         default_factory=dict,
         description="Arbitrary pipeline execution metadata, model telemetry, or filter threshold parameters.",
@@ -484,6 +632,7 @@ def get_module_json_schemas() -> Dict[str, Any]:
     models = [
         EthnoPreparationRecord,
         TaxonResolution,
+        TargetMechanismRecord,
         PhytochemicalRecord,
         ExtractionBatch,
         EnrichedPlantGraph,
@@ -506,6 +655,10 @@ __all__ = [
     "administration_route",
     "ExtractionVerdict",
     "extraction_verdict",
+    "TargetActionType",
+    "target_action_type",
+    "AcidBaseClass",
+    "acid_base_class",
     # Introspection tuples
     "PLANT_PARTS",
     "PREPARATION_TYPES",
@@ -513,10 +666,13 @@ __all__ = [
     "THERMAL_REGIMES",
     "ADMINISTRATION_ROUTES",
     "EXTRACTION_VERDICTS",
+    "TARGET_ACTION_TYPES",
+    "ACID_BASE_CLASSES",
     # Models
     "DecoctionBaseModel",
     "EthnoPreparationRecord",
     "TaxonResolution",
+    "TargetMechanismRecord",
     "PhytochemicalRecord",
     "ExtractionBatch",
     "EnrichedPlantGraph",
