@@ -10,6 +10,10 @@ from src.cheminformatics import (
     calculate_extraction_plausibility,
     map_plausibility_to_verdict,
     create_phytochemical_record,
+    compute_logd,
+    compute_arrhenius_survival,
+    compute_organ_factor,
+    simulate_extraction_grid,
 )
 
 RUTIN_SMILES = "CC1C(C(C(C(O1)OCC2C(C(C(C(O2)OC3=C(OC4=CC(=CC(=C4C3=O)O)O)C5=CC(=C(C=C5)O)O)O)O)O)O)O)O"
@@ -107,21 +111,21 @@ def test_water_vs_lipid_scoring():
 
 
 def test_thermal_regime_penalties():
-    """Verify thermal penalties for boiling prolonged on thermolabile and volatile molecules."""
+    """Verify thermal penalties for boiling prolonged on thermolabile and volatile molecules via Arrhenius kinetics."""
     art_desc = calculate_descriptors(ARTEMISININ_SMILES)
     menthol_desc = calculate_descriptors(MENTHOL_SMILES)
 
-    # Artemisinin: 0.70x penalty under boiling_prolonged
+    # Artemisinin: severe degradation under boiling_prolonged (100 C, 30 min) due to endoperoxide
     art_cold = calculate_extraction_plausibility(art_desc, "water", "cold_ambient")
     art_boil = calculate_extraction_plausibility(art_desc, "water", "boiling_prolonged")
     assert art_cold > art_boil
-    assert np.isclose(art_boil, art_cold * 0.70, atol=1e-3)
+    assert art_boil < art_cold * 0.30  # >70% destroyed by 30 min boiling
 
-    # Menthol: 0.50x penalty for volatility under boiling_prolonged
+    # Menthol: evaporative loss under open boiling_prolonged
     m_cold = calculate_extraction_plausibility(menthol_desc, "water", "cold_ambient")
     m_boil = calculate_extraction_plausibility(menthol_desc, "water", "boiling_prolonged")
     assert m_cold > m_boil
-    assert np.isclose(m_boil, m_cold * 0.50, atol=1e-3)
+    assert m_boil < m_cold * 0.25  # Evaporative loss
 
     # Poultice/none: always returns 1.0
     assert calculate_extraction_plausibility(art_desc, "none", "cold_ambient") == 1.0
@@ -163,4 +167,109 @@ def test_create_phytochemical_record():
     assert record.provenance_doi == "10.1016/j.phytochem.2021.1001"
     assert record.is_thermolabile is False
     assert record.is_volatile is False
+
+
+# ==============================================================================
+# Requirement: Physical Chemistry & Organ Localization Tests
+# ==============================================================================
+
+def test_compute_logd_alkaloid_vinegar_protonation():
+    """Verify that basic alkaloids protonate at acidic pH (vinegar/wine), dropping logD into water-soluble range."""
+    from rdkit import Chem
+    # Quinine SMILES
+    quinine_smi = "C=CC1CN2CCC1CC2C(O)c1ccnc2ccc(OC)cc12"
+    mol = Chem.MolFromSmiles(quinine_smi)
+    assert mol is not None
+
+    clogp = 3.17
+    # At neutral water pH 7.0
+    logd_neutral, acid_base, pka = compute_logd(mol, clogp, ph=7.0)
+    assert acid_base == "basic_alkaloid"
+    assert pka == 8.8
+    assert logd_neutral < clogp
+
+    # In vinegar / sour wine pH 3.0: protonation drops logD by > 5 units!
+    logd_vinegar, _, _ = compute_logd(mol, clogp, ph=3.0)
+    assert logd_vinegar < -1.0  # Highly hydrophilic salt species
+    assert logd_vinegar < logd_neutral - 3.0
+
+    # In wood ash / alkaline pH 10.0: uncharged freebase, logD approaches neutral cLogP
+    logd_alkaline, _, _ = compute_logd(mol, clogp, ph=10.0)
+    assert np.isclose(logd_alkaline, clogp, atol=0.15)
+
+
+def test_compute_logd_weak_acid_and_phenol():
+    """Verify that carboxylic acids and phenols deprotonate at basic pH, dropping logD."""
+    from rdkit import Chem
+    # Salicylic acid: carboxylic acid + phenol
+    acid_smi = "O=C(O)c1ccccc1O"
+    mol = Chem.MolFromSmiles(acid_smi)
+    assert mol is not None
+
+    logd_ph3, acid_base, pka = compute_logd(mol, clogp=2.26, ph=3.0)
+    assert acid_base == "weak_acid"
+    assert pka == 4.2
+    # At pH 3.0 (below pKa 4.2), mostly uncharged acid
+    assert logd_ph3 > 1.8
+
+    # At pH 8.0 (above pKa 4.2), deprotonated carboxylate anion drops logD
+    logd_ph8, _, _ = compute_logd(mol, clogp=2.26, ph=8.0)
+    assert logd_ph8 < -1.0
+
+
+def test_compute_arrhenius_survival_artemisinin_cold_vs_boil():
+    """Verify Arrhenius kinetic survival for Artemisinin: >99% at 25 C vs <20% at 100 C for 45 min."""
+    from rdkit import Chem
+    mol = Chem.MolFromSmiles(ARTEMISININ_SMILES)
+    assert mol is not None
+
+    # Cold wringing: 25 C for 60 min
+    surv_cold, t_half, is_thermo = compute_arrhenius_survival(mol, temp_c=25.0, duration_min=60.0)
+    assert is_thermo is True
+    assert np.isclose(t_half, 15.07, atol=0.1)
+    assert surv_cold > 0.99  # Preserved in cold preparation!
+
+    # Traditional Chinese medicine prolonged decoction: 100 C for 45 min
+    surv_boil, _, _ = compute_arrhenius_survival(mol, temp_c=100.0, duration_min=45.0)
+    assert surv_boil < 0.15  # >85% thermally degraded, matching historical reports!
+
+
+def test_compute_organ_factor():
+    """Verify organ-level localization multipliers."""
+    # Match: 1.0
+    assert compute_organ_factor("root", ["root", "rhizome"]) == 1.0
+    assert compute_organ_factor("whole_plant", ["leaf"]) == 1.0
+    assert compute_organ_factor("leaf", []) == 1.0
+
+    # Aerial parts relationship: 0.85
+    assert compute_organ_factor("aerial_parts", ["flower"]) == 0.85
+    assert compute_organ_factor("flower", ["aerial_parts"]) == 0.85
+
+    # Strictly disjoint organs: 0.08
+    assert compute_organ_factor("root", ["flower", "aerial_parts"]) == 0.08
+    assert compute_organ_factor("bark", ["seed"]) == 0.08
+
+
+def test_simulate_extraction_grid():
+    """Verify generation of 2D in silico simulation grid for recipe optimization."""
+    grid = simulate_extraction_grid(
+        compound_smiles=ARTEMISININ_SMILES,
+        tpsa=54.2,
+        clogp=2.71,
+        documented_organs=["leaf", "aerial_parts"],
+        prepared_part="aerial_parts",
+        temp_range=[25.0, 50.0, 80.0, 100.0],
+        param_range=[2.0, 4.0, 7.0, 9.0],
+        param_type="ph",
+        solvent_class="water",
+        fixed_duration_min=30.0,
+    )
+    assert "temp_axis" in grid
+    assert "param_axis" in grid
+    assert "plausibility_grid" in grid
+    assert len(grid["plausibility_grid"]) == 4  # 4 temp points
+    assert len(grid["plausibility_grid"][0]) == 4  # 4 pH points
+    assert grid["organ_factor"] == 1.0
+    # Higher temperature should have lower survival/plausibility due to thermal breakdown
+    assert grid["plausibility_grid"][0][2] > grid["plausibility_grid"][3][2]
 

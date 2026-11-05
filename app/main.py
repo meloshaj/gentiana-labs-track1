@@ -127,6 +127,51 @@ def _case_records(case: str) -> Tuple[List[Dict[str, Any]], str]:
                 ambiguity_notes="Internal use of comfrey carries a documented pyrrolizidine alkaloid toxicity concern.",
             ),
         ], DEMO_CITATION
+
+    if case == "Cinchona pubescens":
+        ind = "malarial intermittent fever and ague"
+        return [
+            _rec(
+                verbatim_plant_name="Cinchona pubescens", plant_part="bark", preparation_type="infusion",
+                solvent_class="vinegar_acidic", thermal_regime="cold_ambient",
+                estimated_ph=3.0, duration_minutes=1440.0, temperature_celsius=20.0,
+                verbatim_indication=ind, administration_route="oral",
+                verbatim_quote="The powdered Peruvian bark is steeped in sour wine for two days; the acid draws out the bitter salt to quell shaking agues.",
+                cultural_or_geographic_origin="Colonial South American / European Jesuit", extraction_confidence=0.96,
+                ambiguity_notes="Acidic wine maceration (pH 3.0) protonates quinine alkaloids into water-soluble salts.",
+            ),
+            _rec(
+                verbatim_plant_name="Cinchona pubescens", plant_part="bark", preparation_type="decoction",
+                solvent_class="water", thermal_regime="boiling_prolonged",
+                estimated_ph=7.0, duration_minutes=45.0, temperature_celsius=100.0,
+                verbatim_indication=ind, administration_route="oral",
+                verbatim_quote="Boiled in plain well-water without acid, the bark releases meager virtue, its bitter principles remaining bound.",
+                cultural_or_geographic_origin="Colonial South American / European Jesuit", extraction_confidence=0.90,
+                ambiguity_notes="Neutral water fails to ionize the quinuclidine tertiary amine, restricting extraction.",
+            ),
+        ], DEMO_CITATION
+
+    if case == "Papaver somniferum":
+        return [
+            _rec(
+                verbatim_plant_name="Papaver somniferum", plant_part="fruit", preparation_type="infusion",
+                solvent_class="water", thermal_regime="warm_steep",
+                estimated_ph=7.0, duration_minutes=30.0, temperature_celsius=60.0,
+                verbatim_indication="intractable pain and severe restlessness", administration_route="oral",
+                verbatim_quote="The dried latex harvested from unripe green poppy heads is dissolved in warm water with syrup for agonizing pain and sleeplessness.",
+                cultural_or_geographic_origin="Greco-Roman & Islamic Pharmacopeia", extraction_confidence=0.97,
+                ambiguity_notes="Latex exudate is rich in morphinan alkaloids (morphine, codeine), yielding potent analgesia.",
+            ),
+            _rec(
+                verbatim_plant_name="Papaver somniferum", plant_part="seed", preparation_type="decoction",
+                solvent_class="water", thermal_regime="boiling_prolonged",
+                estimated_ph=7.0, duration_minutes=30.0, temperature_celsius=100.0,
+                verbatim_indication="mild demulcent nourishment", administration_route="oral",
+                verbatim_quote="The ripe seeds, free of any milky juice, are boiled into a demulcent gruel for children, bearing no sleeping virtue.",
+                cultural_or_geographic_origin="Greco-Roman & Islamic Pharmacopeia", extraction_confidence=0.93,
+                ambiguity_notes="Organ localization: morphinan alkaloids are restricted to capsule laticifers and absent in mature seeds.",
+            ),
+        ], DEMO_CITATION
     raise KeyError(case)
 
 
@@ -135,6 +180,8 @@ CASE_STUDIES: Dict[str, str] = {
     "Gentiana lutea (Boiling Root Decoction)": "Gentiana lutea",
     "Artemisia annua (Cold Wringing vs. Prolonged Boiling)": "Artemisia annua",
     "Symphytum officinale (Topical Poultice vs. Internal Tea & PA Toxicity Warning)": "Symphytum officinale",
+    "Cinchona pubescens (Acidic Wine/Vinegar Maceration vs. Neutral Water)": "Cinchona pubescens",
+    "Papaver somniferum (Opium Latex/Capsule vs. Ripe Seed Porridge)": "Papaver somniferum",
 }
 
 
@@ -228,12 +275,24 @@ def analyze_records(records_json: str) -> List[Dict[str, Any]]:
     for rec in json.loads(records_json):
         taxon = resolve_taxon(rec["verbatim_plant_name"])
         compounds = enrich_taxon_compounds(
-            taxon["accepted_scientific_name"], rec["solvent_class"], rec["thermal_regime"],
+            taxon["accepted_scientific_name"],
+            rec["solvent_class"],
+            rec["thermal_regime"],
             gbif_usage_key=taxon.get("gbif_usage_key"),
+            estimated_ph=rec.get("estimated_ph"),
+            duration_minutes=rec.get("duration_minutes"),
+            temperature_celsius=rec.get("temperature_celsius"),
+            prepared_part=rec.get("plant_part", "unknown"),
         )
         if not compounds:  # taxon string may carry authorship the curated set lacks
             compounds = enrich_taxon_compounds(
-                rec["verbatim_plant_name"], rec["solvent_class"], rec["thermal_regime"]
+                rec["verbatim_plant_name"],
+                rec["solvent_class"],
+                rec["thermal_regime"],
+                estimated_ph=rec.get("estimated_ph"),
+                duration_minutes=rec.get("duration_minutes"),
+                temperature_celsius=rec.get("temperature_celsius"),
+                prepared_part=rec.get("plant_part", "unknown"),
             )
         out.append({"record": rec, "taxon": taxon, "compounds": [c.model_dump(mode="json") for c in compounds]})
     return out
@@ -302,15 +361,30 @@ def build_frame(analysis: Dict[str, Any], threshold: float, flag_toxic: bool, sh
     rows = []
     for c in analysis["compounds"]:
         st_ = status_for(c, threshold, flag_toxic)
+        primary_target = "None"
+        if c.get("known_targets"):
+            t = c["known_targets"][0]
+            gene = t.get("gene_symbol", "")
+            action = t.get("action_type", "")
+            primary_target = f"{gene} ({action})" if gene else action
+
         rows.append({
-            "Compound Name": c["compound_name"], "SMILES": c["smiles"], "MW": c["mw"],
-            "cLogP": c["clogp"], "TPSA": c["tpsa"],
-            "Plausibility Score": c["extraction_plausibility_score"], "Status": st_,
+            "Compound Name": c["compound_name"],
+            "Class": c.get("acid_base_class", "neutral"),
+            "logD (pH)": c.get("logd_at_recipe_ph", c["clogp"]),
+            "MW": c["mw"],
+            "cLogP": c["clogp"],
+            "TPSA": c["tpsa"],
+            "Organ Match": c.get("organ_match_factor", 1.0),
+            "Thermal Surv": c.get("thermal_survival_fraction", 1.0),
+            "Target": primary_target,
+            "Plausibility Score": c["extraction_plausibility_score"],
+            "Status": st_,
             "Toxicity Flags": ", ".join(c["toxicity_alerts"]) if flag_toxic else "",
             "Below Threshold": c["extraction_plausibility_score"] < threshold,
+            "SMILES": c["smiles"],
         })
-    df = pd.DataFrame(rows, columns=[
-        "Compound Name", "SMILES", "MW", "cLogP", "TPSA", "Plausibility Score", "Status", "Toxicity Flags", "Below Threshold"])
+    df = pd.DataFrame(rows)
     if not show_excluded and not df.empty:
         df = df[~df["Below Threshold"]]
     return df.reset_index(drop=True)
@@ -478,7 +552,7 @@ def render_comparison(analyses: List[Dict[str, Any]], frames: List[pd.DataFrame]
 
 
 def render_table(analyses: List[Dict[str, Any]], frames: List[pd.DataFrame]) -> None:
-    st.subheader("Chemical Table")
+    st.subheader("Chemical & Pharmacological Table")
     parts = []
     for a, df in zip(analyses, frames):
         if not df.empty:
@@ -492,18 +566,22 @@ def render_table(analyses: List[Dict[str, Any]], frames: List[pd.DataFrame]) -> 
     options = sorted(full["Preparation"].unique())
     chosen = st.multiselect("Preparations", options, default=options)
     shown = full[full["Preparation"].isin(chosen)]
-    cols = ["Preparation", "Compound Name", "SMILES", "MW", "cLogP", "TPSA", "Plausibility Score", "Status"]
+    cols = [
+        "Preparation", "Compound Name", "Class", "logD (pH)", "Organ Match",
+        "Thermal Surv", "Target", "Plausibility Score", "Status"
+    ]
     styled = shown[cols].style.map(style_status, subset=["Status"])
     st.dataframe(
         styled, width="stretch", hide_index=True,
         column_config={
             "Plausibility Score": st.column_config.ProgressColumn("Plausibility Score", min_value=0.0, max_value=1.0, format="%.2f"),
-            "MW": st.column_config.NumberColumn(format="%.1f"),
-            "cLogP": st.column_config.NumberColumn(format="%.2f"),
-            "TPSA": st.column_config.NumberColumn(format="%.1f"),
-            "SMILES": st.column_config.TextColumn(width="medium"),
+            "Organ Match": st.column_config.ProgressColumn("Organ Match", min_value=0.0, max_value=1.0, format="%.2f"),
+            "Thermal Surv": st.column_config.ProgressColumn("Thermal Surv", min_value=0.0, max_value=1.0, format="%.2f"),
+            "logD (pH)": st.column_config.NumberColumn(format="%.2f"),
+            "Class": st.column_config.TextColumn(width="small"),
+            "Target": st.column_config.TextColumn(width="medium"),
         })
-    st.download_button("Download table (CSV)", shown[cols].to_csv(index=False), "decoctiongraph_compounds.csv", "text/csv")
+    st.download_button("Download table (CSV)", shown.to_csv(index=False), "decoctiongraph_compounds.csv", "text/csv")
 
 
 def main() -> None:

@@ -144,6 +144,9 @@ class DecoctionGraphBuilder:
                 confidence=record.extraction_confidence,
                 origin=record.cultural_or_geographic_origin,
                 ambiguity_notes=record.ambiguity_notes,
+                estimated_ph=record.estimated_ph,
+                duration_minutes=record.duration_minutes,
+                temperature_celsius=record.temperature_celsius,
             )
 
         # 4. Indication Node
@@ -186,6 +189,10 @@ class DecoctionGraphBuilder:
             solvent_class=record.solvent_class,
             thermal_regime=record.thermal_regime,
             gbif_usage_key=gbif_key,
+            estimated_ph=record.estimated_ph,
+            duration_minutes=record.duration_minutes,
+            temperature_celsius=record.temperature_celsius,
+            prepared_part=record.plant_part,
         )
 
         compound_node_ids: List[str] = []
@@ -210,6 +217,15 @@ class DecoctionGraphBuilder:
                     toxicity_alerts=comp.toxicity_alerts,
                     has_toxicity_alerts=len(comp.toxicity_alerts) > 0,
                     doi=comp.provenance_doi,
+                    acid_base_class=comp.acid_base_class,
+                    estimated_pka=comp.estimated_pka,
+                    logd_at_recipe_ph=comp.logd_at_recipe_ph,
+                    thermal_half_life_min_at_100c=comp.thermal_half_life_min_at_100c,
+                    thermal_survival_fraction=comp.thermal_survival_fraction,
+                    documented_organs=comp.documented_organs,
+                    organ_match_factor=comp.organ_match_factor,
+                    mechanistic_alignment_score=comp.mechanistic_alignment_score,
+                    known_targets=[t.model_dump() for t in comp.known_targets],
                 )
 
             # (Preparation) -> [SOLUBILIZES] -> (Compound)
@@ -221,6 +237,9 @@ class DecoctionGraphBuilder:
                 plausibility_score=comp.extraction_plausibility_score,
                 status=comp.extraction_verdict,
                 verdict=comp.extraction_verdict,
+                organ_match_factor=comp.organ_match_factor,
+                thermal_survival_fraction=comp.thermal_survival_fraction,
+                logd_at_recipe_ph=comp.logd_at_recipe_ph,
             )
 
         return plant_node_id, prep_node_id, indication_node_id, compound_node_ids
