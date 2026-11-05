@@ -818,3 +818,4 @@ def validate_mechanistic_path(
         True if the path is scientifically validated, False otherwise.
     """
     return bool(plausibility_score >= min_plausibility and alignment_score >= min_alignment)
+

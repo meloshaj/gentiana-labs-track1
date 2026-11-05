@@ -11,20 +11,30 @@ import re
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+from rdkit import Chem
 import streamlit as st
 import streamlit.components.v1 as components
 
+from src.cheminformatics import (
+    calculate_descriptors,
+    calculate_recipe_yield,
+    compute_arrhenius_survival,
+    compute_logd,
+    detect_structural_alerts,
+)
 from src.extraction import extract_from_text, mock_extract_hypericum_sample
 from src.graph_builder import DecoctionGraphBuilder
-from src.lotus_retriever import enrich_taxon_compounds
+from src.lotus_retriever import enrich_taxon_compounds, get_compounds_for_taxon
+from src.mechanism import get_targets_for_compound
 from src.schemas import EthnoPreparationRecord, TaxonResolution
 from src.taxonomy import resolve_plant_name
 
@@ -584,11 +594,97 @@ def render_table(analyses: List[Dict[str, Any]], frames: List[pd.DataFrame]) -> 
     st.download_button("Download table (CSV)", shown.to_csv(index=False), "decoctiongraph_compounds.csv", "text/csv")
 
 
-def main() -> None:
-    st.set_page_config(page_title="DecoctionGraph | Gentiana Labs", page_icon="🌿", layout="wide")
-    render_header()
-    cfg = sidebar()
+@st.cache_data(show_spinner=False)
+def compute_optimization_grid(
+    target_smiles: str,
+    toxin_smiles: Optional[str],
+    target_organs_tuple: Tuple[str, ...],
+    toxin_organs_tuple: Tuple[str, ...],
+    prepared_part: str,
+    solvent_mode: str,
+    duration_min: float,
+    y_axis_mode: str,
+    fixed_param: float,
+) -> Dict[str, Any]:
+    temps = [20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100]
+    if y_axis_mode == "pH":
+        y_vals = [2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0, 8.5, 9.0, 9.5]
+    else:  # Ethanol %
+        y_vals = [0.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 95.0]
 
+    yield_matrix: List[List[float]] = []
+    selectivity_matrix: List[List[float]] = []
+
+    best_score = -1.0
+    best_temp = temps[0]
+    best_y = y_vals[0]
+    best_target_yield = 0.0
+    best_toxin_yield = 0.0
+
+    for y in y_vals:
+        row_yield: List[float] = []
+        row_sel: List[float] = []
+        for t in temps:
+            cur_ph = y if y_axis_mode == "pH" else fixed_param
+            cur_eth = fixed_param if y_axis_mode == "pH" else y
+            mode = "hydroalcoholic" if (y_axis_mode != "pH" or cur_eth > 0) else solvent_mode
+
+            y_target = calculate_recipe_yield(
+                target_smiles,
+                solvent_mode=mode,
+                temp_c=float(t),
+                ph=float(cur_ph),
+                duration_min=float(duration_min),
+                ethanol_pct=float(cur_eth),
+                prepared_part=prepared_part,
+                documented_organs=list(target_organs_tuple),
+            )
+            y_tgt_pct = round(y_target * 100.0, 1)
+            row_yield.append(y_tgt_pct)
+
+            if toxin_smiles:
+                y_toxin = calculate_recipe_yield(
+                    toxin_smiles,
+                    solvent_mode=mode,
+                    temp_c=float(t),
+                    ph=float(cur_ph),
+                    duration_min=float(duration_min),
+                    ethanol_pct=float(cur_eth),
+                    prepared_part=prepared_part,
+                    documented_organs=list(toxin_organs_tuple),
+                )
+                sel_pct = round(max(0.0, (y_target - y_toxin) * 100.0), 1)
+                toxin_pct = round(y_toxin * 100.0, 1)
+            else:
+                toxin_pct = 0.0
+                sel_pct = y_tgt_pct
+
+            row_sel.append(sel_pct)
+
+            if sel_pct > best_score:
+                best_score = sel_pct
+                best_temp = t
+                best_y = y
+                best_target_yield = y_tgt_pct
+                best_toxin_yield = toxin_pct
+
+        yield_matrix.append(row_yield)
+        selectivity_matrix.append(row_sel)
+
+    return {
+        "temps": temps,
+        "y_vals": y_vals,
+        "yield_matrix": yield_matrix,
+        "selectivity_matrix": selectivity_matrix,
+        "best_temp": best_temp,
+        "best_y": best_y,
+        "best_score": best_score,
+        "best_target_yield": best_target_yield,
+        "best_toxin_yield": best_toxin_yield,
+    }
+
+
+def render_mining_view(cfg: Dict[str, Any]) -> None:
     if cfg["mode"] == MODE_PRESET:
         case = load_case(cfg["case"])
         records, citation = case["records"], case["citation"]
@@ -596,13 +692,14 @@ def main() -> None:
     else:
         result = raw_text_inputs()
         if not result:
-            st.stop()
+            st.info("Paste or mine an ethnobotanical passage above to generate the knowledge graph.")
+            return
         if result.get("error"):
             st.warning(result["error"])
         records, citation = result["records"], result["citation"]
         if not records:
             st.error("No preparation records could be extracted from this text.")
-            st.stop()
+            return
         st.success(f"Extracted {len(records)} record(s) via {'LLM' if result['method'] == 'llm' else 'offline keyword'} mode.")
 
     records_json = json.dumps(records, sort_keys=True)
@@ -642,6 +739,414 @@ def main() -> None:
                "violet = plausible compound, grey = excluded, red = toxic alert, gold = macromolecular target. "
                "⭐ Thick emerald edges = Validated Mechanistic Paths (S_ext ≥ 0.50, Alignment ≥ 0.60).")
     components.html(html, height=700, scrolling=True)
+
+
+def render_recipe_optimizer() -> None:
+    st.subheader("🧪 In Silico Recipe Optimizer & What-If Formulator")
+    st.markdown(
+        "Simulate and optimize continuous physicochemical extraction yields, thermodynamic selectivity "
+        "windows, and Arrhenius thermal degradation kinetics across solvent vehicle, pH, temperature, and contact time."
+    )
+
+    # 1. Taxon & Compound Controls
+    taxa_defaults = [
+        "Artemisia annua",
+        "Symphytum officinale",
+        "Hypericum perforatum",
+        "Gentiana lutea",
+        "Cinchona pubescens",
+        "Papaver somniferum",
+    ]
+    all_taxa = taxa_defaults + [t for t in known_taxa() if t not in taxa_defaults]
+
+    c_tax, c_org, c_tgt, c_tox = st.columns([1.2, 0.9, 1.2, 1.2])
+
+    with c_tax:
+        chosen_taxon = st.selectbox("Plant Taxon", all_taxa, index=0, key="opt_taxon")
+
+    # Smart organ default based on taxon
+    organ_options = ["aerial_parts", "leaf", "flower", "root", "bark", "fruit", "seed", "rhizome", "stem", "whole_plant"]
+    default_org_idx = 0
+    tx_lower = chosen_taxon.lower()
+    if "symphytum" in tx_lower:
+        default_org_idx = organ_options.index("leaf")
+    elif "gentiana" in tx_lower:
+        default_org_idx = organ_options.index("root")
+    elif "cinchona" in tx_lower:
+        default_org_idx = organ_options.index("bark")
+    elif "papaver" in tx_lower:
+        default_org_idx = organ_options.index("fruit")
+    elif "hypericum" in tx_lower:
+        default_org_idx = organ_options.index("flower")
+    elif "artemisia" in tx_lower:
+        default_org_idx = organ_options.index("aerial_parts")
+
+    with c_org:
+        chosen_organ = st.selectbox("Plant Organ", organ_options, index=default_org_idx, key="opt_organ")
+
+    # Load compounds for chosen taxon
+    raw_compounds = get_compounds_for_taxon(chosen_taxon)
+    if not raw_compounds:
+        st.warning(f"No compound records found in LOTUS for {chosen_taxon}.")
+        return
+
+    comp_names = [c["compound_name"] for c in raw_compounds]
+    comp_map = {c["compound_name"]: c for c in raw_compounds}
+
+    # Smart target default
+    default_tgt_idx = 0
+    target_preferred = {
+        "artemisia": "Artemisinin",
+        "symphytum": "Allantoin",
+        "hypericum": "Hyperforin",
+        "gentiana": "Gentiopicroside",
+        "cinchona": "Quinine",
+        "papaver": "Morphine",
+    }
+    for k, v in target_preferred.items():
+        if k in tx_lower and v in comp_names:
+            default_tgt_idx = comp_names.index(v)
+            break
+
+    with c_tgt:
+        chosen_target_name = st.selectbox("Target Bioactive Compound", comp_names, index=default_tgt_idx, key="opt_target")
+
+    # Detect toxic alerts in compounds
+    toxic_names = [c["compound_name"] for c in raw_compounds if detect_structural_alerts(c["smiles"])]
+    toxin_choices = ["(None / Maximize Yield Only)"] + comp_names
+    default_tox_idx = 0
+    if toxic_names:
+        default_tox_idx = toxin_choices.index(toxic_names[0])
+
+    with c_tox:
+        chosen_toxin_name = st.selectbox("Undesired Toxin to Penalize", toxin_choices, index=default_tox_idx, key="opt_toxin")
+
+    target_comp = comp_map[chosen_target_name]
+    target_smiles = target_comp["smiles"]
+    target_organs = tuple(target_comp.get("documented_organs") or [])
+
+    has_toxin = chosen_toxin_name != "(None / Maximize Yield Only)"
+    if has_toxin:
+        toxin_comp = comp_map[chosen_toxin_name]
+        toxin_smiles = toxin_comp["smiles"]
+        toxin_organs = tuple(toxin_comp.get("documented_organs") or [])
+    else:
+        toxin_comp = None
+        toxin_smiles = None
+        toxin_organs = ()
+
+    st.markdown("---")
+
+    # 2. Recipe Parameters Formulator Controls
+    st.markdown("##### 🎛️ Extraction Vehicle & Physicochemical Conditions")
+    col_veh, col_eth, col_ph, col_temp, col_time = st.columns(5)
+
+    veh_options = [
+        "Water (Aqueous)",
+        "Hydroalcoholic (Ethanol / Water)",
+        "Lipid Oil (Maceration)",
+        "Vinegar / Acidic Wine",
+    ]
+    def_veh_idx = 0
+    if "cinchona" in tx_lower:
+        def_veh_idx = 3  # Vinegar
+    elif "hypericum" in tx_lower:
+        def_veh_idx = 2  # Lipid Oil
+
+    with col_veh:
+        chosen_veh = st.selectbox("Extraction Vehicle", veh_options, index=def_veh_idx, key="opt_veh")
+
+    veh_mode_map = {
+        "Water (Aqueous)": "water",
+        "Hydroalcoholic (Ethanol / Water)": "hydroalcoholic",
+        "Lipid Oil (Maceration)": "lipid_oil",
+        "Vinegar / Acidic Wine": "vinegar_acidic",
+    }
+    solvent_mode = veh_mode_map[chosen_veh]
+
+    with col_eth:
+        if solvent_mode == "hydroalcoholic":
+            ethanol_pct = st.slider("Ethanol % (v/v)", 0.0, 95.0, 50.0, 5.0, format="%.0f%%", key="opt_eth")
+        else:
+            st.slider("Ethanol % (v/v)", 0.0, 95.0, 0.0, disabled=True, format="%.0f%%", key="opt_eth_dis")
+            ethanol_pct = 0.0
+
+    with col_ph:
+        default_ph = 3.0 if solvent_mode == "vinegar_acidic" else 7.0
+        solv_ph = st.slider("Solvent pH", 2.5, 9.5, default_ph, 0.1, format="%.1f", key="opt_ph")
+
+    with col_temp:
+        default_t = 25.0 if "annua" in tx_lower else 80.0
+        solv_temp = st.slider("Temperature (°C)", 20.0, 100.0, default_t, 5.0, format="%.0f°C", key="opt_temp")
+
+    with col_time:
+        solv_time = st.slider("Contact Time (min)", 5.0, 120.0, 30.0, 5.0, format="%.0f min", key="opt_time")
+
+    # 3. Live Metrics Display
+    cur_target_yield = calculate_recipe_yield(
+        target_smiles,
+        solvent_mode=solvent_mode,
+        temp_c=solv_temp,
+        ph=solv_ph,
+        duration_min=solv_time,
+        ethanol_pct=ethanol_pct,
+        prepared_part=chosen_organ,
+        documented_organs=list(target_organs),
+    ) * 100.0
+
+    if has_toxin and toxin_smiles:
+        cur_toxin_yield = calculate_recipe_yield(
+            toxin_smiles,
+            solvent_mode=solvent_mode,
+            temp_c=solv_temp,
+            ph=solv_ph,
+            duration_min=solv_time,
+            ethanol_pct=ethanol_pct,
+            prepared_part=chosen_organ,
+            documented_organs=list(toxin_organs),
+        ) * 100.0
+        cur_selectivity = max(0.0, cur_target_yield - cur_toxin_yield)
+    else:
+        cur_toxin_yield = 0.0
+        cur_selectivity = cur_target_yield
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric(
+        f"🎯 Target Yield: {chosen_target_name}",
+        f"{cur_target_yield:.1f}%",
+        help="Physical chemistry extraction yield based on logD(pH), Arrhenius kinetics, and organ localization.",
+    )
+    if has_toxin:
+        m2.metric(
+            f"⚠️ Toxin Co-Extraction: {chosen_toxin_name}",
+            f"{cur_toxin_yield:.1f}%",
+            delta=f"-{cur_toxin_yield:.1f}% risk",
+            delta_color="inverse",
+            help="Co-extracted fraction of undesirable or toxic compound.",
+        )
+    else:
+        m2.metric("⚠️ Toxin Co-Extraction", "None Selected", help="No undesirable compound flagged or selected.")
+
+    m3.metric(
+        "✨ Selectivity Window",
+        f"{cur_selectivity:.1f}%",
+        help="Therapeutic window: Target Yield minus Toxin Co-Extraction.",
+    )
+
+    st.markdown("---")
+
+    # 4. 2D Optimization Heatmaps
+    st.markdown("##### 🗺️ 2D Extraction Landscape & Sweet Spot Discovery")
+    y_axis_choice = st.radio(
+        "Heatmap Y-Axis Parameter",
+        ["Solvent pH (2.5 - 9.5)", "Ethanol % (0% - 95%)"],
+        horizontal=True,
+        key="opt_y_choice",
+    )
+    y_mode = "pH" if "pH" in y_axis_choice else "Ethanol %"
+    fixed_p = ethanol_pct if y_mode == "pH" else solv_ph
+    y_axis_title = "Solvent pH" if y_mode == "pH" else "Ethanol % (v/v)"
+
+    grid = compute_optimization_grid(
+        target_smiles=target_smiles,
+        toxin_smiles=toxin_smiles if has_toxin else None,
+        target_organs_tuple=target_organs,
+        toxin_organs_tuple=toxin_organs,
+        prepared_part=chosen_organ,
+        solvent_mode=solvent_mode,
+        duration_min=solv_time,
+        y_axis_mode=y_mode,
+        fixed_param=float(fixed_p),
+    )
+
+    hm1, hm2 = st.columns(2)
+
+    with hm1:
+        fig_yield = go.Figure(data=go.Heatmap(
+            z=grid["yield_matrix"],
+            x=grid["temps"],
+            y=grid["y_vals"],
+            colorscale="Viridis",
+            colorbar=dict(title="Yield (%)", thickness=12),
+            zmin=0, zmax=100,
+            hovertemplate="Temp: %{x}°C<br>" + y_axis_title + ": %{y}<br>Yield: %{z:.1f}%<extra></extra>",
+        ))
+        fig_yield.update_layout(
+            title=dict(text=f"Bioactive Yield: {chosen_target_name} (%)", font=dict(size=14)),
+            xaxis=dict(title="Extraction Temperature (°C)", dtick=10),
+            yaxis=dict(title=y_axis_title),
+            height=400,
+            margin=dict(l=40, r=20, t=50, b=40),
+            template="plotly_white",
+        )
+        st.plotly_chart(fig_yield, width="stretch", key="fig_yield_hm")
+
+    with hm2:
+        fig_sel = go.Figure(data=go.Heatmap(
+            z=grid["selectivity_matrix"],
+            x=grid["temps"],
+            y=grid["y_vals"],
+            colorscale="Plasma",
+            colorbar=dict(title="Selectivity (%)", thickness=12),
+            zmin=0, zmax=100,
+            hovertemplate="Temp: %{x}°C<br>" + y_axis_title + ": %{y}<br>Selectivity: %{z:.1f}%<extra></extra>",
+        ))
+        # Add Sweet Spot Star marker
+        fig_sel.add_trace(go.Scatter(
+            x=[grid["best_temp"]],
+            y=[grid["best_y"]],
+            mode="markers+text",
+            marker=dict(symbol="star", size=18, color="#00FFCC", line=dict(color="#000000", width=2)),
+            text=["★ Sweet Spot"],
+            textposition="top center",
+            textfont=dict(color="#111827", size=11, family="sans-serif"),
+            name="Sweet Spot",
+            hoverinfo="text",
+            hovertext=(f"Optimal Coordinate: {grid['best_temp']}°C, {y_axis_title}={grid['best_y']}<br>"
+                       f"Selectivity: {grid['best_score']:.1f}%"),
+        ))
+        fig_sel.update_layout(
+            title=dict(
+                text=f"Selectivity Window ({chosen_target_name}" + (f" vs {chosen_toxin_name}" if has_toxin else "") + ") (%)",
+                font=dict(size=14),
+            ),
+            xaxis=dict(title="Extraction Temperature (°C)", dtick=10),
+            yaxis=dict(title=y_axis_title),
+            height=400,
+            margin=dict(l=40, r=20, t=50, b=40),
+            showlegend=False,
+            template="plotly_white",
+        )
+        st.plotly_chart(fig_sel, width="stretch", key="fig_sel_hm")
+
+    # 5. Dynamic Arrhenius Thermal Decay Curve
+    st.markdown("##### ⏱️ Arrhenius Thermal Degradation Kinetics Profile")
+    times = list(range(0, 95, 5))
+    mol_target = Chem.MolFromSmiles(target_smiles)
+    desc_target = calculate_descriptors(target_smiles, ph=solv_ph) or {"mw": 300.0, "tpsa": 60.0}
+
+    surv_cur = [
+        compute_arrhenius_survival(mol_target, temp_c=solv_temp, duration_min=t, mw=desc_target["mw"], tpsa=desc_target["tpsa"])[0] * 100.0
+        for t in times
+    ]
+    surv_25 = [
+        compute_arrhenius_survival(mol_target, temp_c=25.0, duration_min=t, mw=desc_target["mw"], tpsa=desc_target["tpsa"])[0] * 100.0
+        for t in times
+    ]
+    surv_100 = [
+        compute_arrhenius_survival(mol_target, temp_c=100.0, duration_min=t, mw=desc_target["mw"], tpsa=desc_target["tpsa"])[0] * 100.0
+        for t in times
+    ]
+
+    fig_kinetics = go.Figure()
+    fig_kinetics.add_trace(go.Scatter(
+        x=times, y=surv_cur, mode="lines+markers",
+        name=f"{chosen_target_name} @ {solv_temp:.0f}°C (Selected)",
+        line=dict(color="#2563EB", width=3),
+    ))
+    fig_kinetics.add_trace(go.Scatter(
+        x=times, y=surv_25, mode="lines",
+        name=f"{chosen_target_name} @ 25°C (Ambient / Cold)",
+        line=dict(color="#059669", width=2, dash="dash"),
+    ))
+    fig_kinetics.add_trace(go.Scatter(
+        x=times, y=surv_100, mode="lines",
+        name=f"{chosen_target_name} @ 100°C (Boiling Decoction)",
+        line=dict(color="#DC2626", width=2, dash="dot"),
+    ))
+
+    if has_toxin and toxin_smiles:
+        mol_toxin = Chem.MolFromSmiles(toxin_smiles)
+        desc_toxin = calculate_descriptors(toxin_smiles, ph=solv_ph) or {"mw": 300.0, "tpsa": 60.0}
+        surv_toxin = [
+            compute_arrhenius_survival(mol_toxin, temp_c=solv_temp, duration_min=t, mw=desc_toxin["mw"], tpsa=desc_toxin["tpsa"])[0] * 100.0
+            for t in times
+        ]
+        fig_kinetics.add_trace(go.Scatter(
+            x=times, y=surv_toxin, mode="lines",
+            name=f"Toxin: {chosen_toxin_name} @ {solv_temp:.0f}°C",
+            line=dict(color="#9333EA", width=2, dash="dashdot"),
+        ))
+
+    fig_kinetics.update_layout(
+        title=dict(text=f"Thermal Stability Profile: {chosen_target_name} Remaining (%) vs Contact Time", font=dict(size=14)),
+        xaxis=dict(title="Extraction / Boiling Time (minutes)", dtick=10),
+        yaxis=dict(title="Survival Fraction (%)", range=[-2, 105]),
+        height=340,
+        margin=dict(l=40, r=20, t=50, b=40),
+        template="plotly_white",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
+    st.plotly_chart(fig_kinetics, width="stretch", key="fig_kinetics_curve")
+
+    # 6. Recommendation Callout Banner
+    targets = get_targets_for_compound(compound_name=chosen_target_name, inchi_key=target_comp.get("inchikey"))
+    primary_tgt = targets[0] if targets else None
+    gene_symbol = primary_tgt.gene_symbol if primary_tgt else "Enzyme / Receptor"
+    action = primary_tgt.action_type if primary_tgt else "modulator"
+    pathway = primary_tgt.therapeutic_pathway if primary_tgt else "Cellular signaling and biological pathway modulation"
+
+    if y_mode == "pH":
+        opt_vehicle_desc = f"{chosen_veh} (pH {grid['best_y']:.1f})"
+    else:
+        opt_vehicle_desc = f"Hydroalcoholic ({grid['best_y']:.0f}% Ethanol)"
+
+    toxin_clause = (
+        f"while restricting <b>{chosen_toxin_name}</b> to <b>{grid['best_toxin_yield']:.1f}%</b>"
+        if has_toxin else "with unconstrained selectivity"
+    )
+
+    rec_html = f"""
+    <div style="background: linear-gradient(135deg, #064E3B 0%, #065F46 100%); color: white; padding: 20px 24px; border-radius: 12px; border: 1px solid #10B981; margin: 20px 0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+        <h4 style="color: #6EE7B7; margin: 0 0 6px 0; font-size: 1.2rem;">🏆 In Silico Formulation Recommendation</h4>
+        <span style="background: #047857; color: #E6FFFA; padding: 4px 12px; border-radius: 9999px; font-weight: 600; font-size: 0.85rem;">Max Selectivity: {grid['best_score']:.1f}%</span>
+      </div>
+      <p style="font-size: 1.02rem; line-height: 1.5; margin: 8px 0 14px 0;">
+        To maximize <b>{chosen_target_name}</b> (Target: <code>{gene_symbol}</code>, Action: <i>{action}</i>) with predicted yield of <b>{grid['best_target_yield']:.1f}%</b> {toxin_clause}:
+      </p>
+      <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+        <div style="background: rgba(255,255,255,0.12); padding: 8px 14px; border-radius: 8px;">
+          <div style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.8;">Plant Organ</div>
+          <div style="font-size: 1.05rem; font-weight: 700;">{chosen_organ.replace('_', ' ').title()}</div>
+        </div>
+        <div style="background: rgba(255,255,255,0.12); padding: 8px 14px; border-radius: 8px;">
+          <div style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.8;">Optimal Vehicle</div>
+          <div style="font-size: 1.05rem; font-weight: 700;">{opt_vehicle_desc}</div>
+        </div>
+        <div style="background: rgba(255,255,255,0.12); padding: 8px 14px; border-radius: 8px;">
+          <div style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.8;">Optimal Temp</div>
+          <div style="font-size: 1.05rem; font-weight: 700;">{grid['best_temp']}°C</div>
+        </div>
+        <div style="background: rgba(255,255,255,0.12); padding: 8px 14px; border-radius: 8px;">
+          <div style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.8;">Contact Duration</div>
+          <div style="font-size: 1.05rem; font-weight: 700;">{solv_time:.0f} min</div>
+        </div>
+        <div style="background: rgba(255,255,255,0.12); padding: 8px 14px; border-radius: 8px; max-width: 380px;">
+          <div style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.8;">Target Mechanism</div>
+          <div style="font-size: 0.95rem; font-weight: 600; line-height: 1.3;">{pathway[:65]}...</div>
+        </div>
+      </div>
+    </div>
+    """
+    st.markdown(rec_html, unsafe_allow_html=True)
+
+
+def main() -> None:
+    st.set_page_config(page_title="DecoctionGraph | Gentiana Labs", page_icon="🌿", layout="wide")
+    render_header()
+    cfg = sidebar()
+
+    tab_mining, tab_optimizer = st.tabs([
+        "🌿 Ethnobotanical Literature Mining & Knowledge Graph",
+        "🧪 In Silico Recipe Optimizer (What-If Formulator)",
+    ])
+
+    with tab_mining:
+        render_mining_view(cfg)
+
+    with tab_optimizer:
+        render_recipe_optimizer()
 
 
 if __name__ == "__main__":

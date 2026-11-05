@@ -14,6 +14,7 @@ from app.main import (
     analyze_records,
     build_frame,
     build_graph_html,
+    compute_optimization_grid,
     load_case,
     prep_label,
     scatter,
@@ -128,3 +129,73 @@ def test_build_graph_html_and_inlining():
     # Ensure inline local assets function runs without error
     inlined = _inline_local_assets('<script src="lib/bindings/utils.js"></script>')
     assert inlined is not None
+
+
+def test_compute_optimization_grid_yield_and_selectivity():
+    """Verify in silico recipe grid computation, sweet spot finding, and selectivity windows."""
+    from src.lotus_retriever import get_compounds_for_taxon
+
+    # 1. Artemisia annua thermal sensitivity test
+    art_comps = get_compounds_for_taxon("Artemisia annua")
+    artemisinin = [c for c in art_comps if c["compound_name"] == "Artemisinin"][0]
+
+    grid_art = compute_optimization_grid(
+        target_smiles=artemisinin["smiles"],
+        toxin_smiles=None,
+        target_organs_tuple=tuple(artemisinin.get("documented_organs") or []),
+        toxin_organs_tuple=(),
+        prepared_part="aerial_parts",
+        solvent_mode="hydroalcoholic",
+        duration_min=15.0,
+        y_axis_mode="Ethanol %",
+        fixed_param=7.0,
+    )
+
+    assert "temps" in grid_art
+    assert "y_vals" in grid_art
+    assert len(grid_art["yield_matrix"]) == len(grid_art["y_vals"])
+    assert len(grid_art["yield_matrix"][0]) == len(grid_art["temps"])
+    # Thermal decay: cold (20°C) must have higher yield than boiling (100°C)
+    idx_20 = grid_art["temps"].index(20)
+    idx_100 = grid_art["temps"].index(100)
+    high_eth_row = -1  # 95% ethanol
+    assert grid_art["yield_matrix"][high_eth_row][idx_20] > grid_art["yield_matrix"][high_eth_row][idx_100]
+    # Optimal temp should favor cold to moderate extraction due to endoperoxide thermolability
+    assert grid_art["best_temp"] <= 40
+
+    # 2. Symphytum officinale organ selectivity test
+    sym_comps = get_compounds_for_taxon("Symphytum officinale")
+    allantoin = [c for c in sym_comps if c["compound_name"] == "Allantoin"][0]
+    symphytine = [c for c in sym_comps if c["compound_name"] == "Symphytine"][0]
+
+    # Leaf extraction: Allantoin present in leaves, Symphytine restricted to root
+    grid_leaf = compute_optimization_grid(
+        target_smiles=allantoin["smiles"],
+        toxin_smiles=symphytine["smiles"],
+        target_organs_tuple=tuple(allantoin.get("documented_organs") or []),
+        toxin_organs_tuple=tuple(symphytine.get("documented_organs") or []),
+        prepared_part="leaf",
+        solvent_mode="water",
+        duration_min=30.0,
+        y_axis_mode="pH",
+        fixed_param=0.0,
+    )
+    # High selectivity window in leaves (Allantoin ~99% - Symphytine < 10%)
+    assert grid_leaf["best_score"] >= 80.0
+    assert grid_leaf["best_toxin_yield"] < 15.0
+
+    # Root extraction: Symphytine co-extracts significantly
+    grid_root = compute_optimization_grid(
+        target_smiles=allantoin["smiles"],
+        toxin_smiles=symphytine["smiles"],
+        target_organs_tuple=tuple(allantoin.get("documented_organs") or []),
+        toxin_organs_tuple=tuple(symphytine.get("documented_organs") or []),
+        prepared_part="root",
+        solvent_mode="water",
+        duration_min=30.0,
+        y_axis_mode="pH",
+        fixed_param=0.0,
+    )
+    # Selectivity in root is substantially worse than in leaf due to PA co-extraction
+    assert grid_root["best_score"] < grid_leaf["best_score"]
+

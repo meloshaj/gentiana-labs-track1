@@ -36,6 +36,7 @@ from src.cheminformatics import (
     calculate_extraction_plausibility,
     map_plausibility_to_verdict,
     create_phytochemical_record,
+    calculate_recipe_yield,
 )
 from src.lotus_retriever import (
     normalize_botanical_name,
@@ -107,6 +108,7 @@ __all__ = [
     "calculate_extraction_plausibility",
     "map_plausibility_to_verdict",
     "create_phytochemical_record",
+    "calculate_recipe_yield",
     # LOTUS Retriever
     "normalize_botanical_name",
     "get_compounds_for_taxon",

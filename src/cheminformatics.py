@@ -86,18 +86,24 @@ _SMARTS_PHENOL = Chem.MolFromSmarts("[OX2H][cX3]:[c]")
 # Structural Alert Detection
 # ==============================================================================
 
-def detect_structural_alerts(mol: Chem.Mol) -> List[str]:
+def detect_structural_alerts(mol: Union[Chem.Mol, str]) -> List[str]:
     """Detect presence of toxic chemical scaffolds via SMARTS patterns.
 
     Scans for pyrrolizidine alkaloids, aristolochic acid derivatives, and
     ptaquiloside/illudane norsesquiterpene skeletons.
 
     Args:
-        mol: Valid RDKit Mol object.
+        mol: Valid RDKit Mol object or SMILES string.
 
     Returns:
         List of detected alert names, or empty list if none detected.
     """
+    if isinstance(mol, str):
+        rd_mol = Chem.MolFromSmiles(mol)
+        if rd_mol is None:
+            return []
+        mol = rd_mol
+
     detected: List[str] = []
     for alert_name, compiled_patterns in _COMPILED_ALERTS.items():
         if any(mol.HasSubstructMatch(pattern) for pattern in compiled_patterns):
@@ -693,6 +699,89 @@ def simulate_extraction_grid(
         "logd_grid": logd_matrix,
         "survival_grid": survival_matrix,
     }
+
+
+def calculate_recipe_yield(
+    compound_smiles: str,
+    solvent_mode: str = "water",
+    temp_c: float = 25.0,
+    ph: float = 7.0,
+    duration_min: float = 30.0,
+    ethanol_pct: float = 0.0,
+    prepared_part: str = "unknown",
+    documented_organs: Optional[Sequence[str]] = None,
+) -> float:
+    """Calculate the comprehensive physical chemistry extraction yield [0.0, 1.0].
+
+    Integrates:
+      1. SMARTS-based ionization & Henderson-Hasselbalch logD(pH).
+      2. Solvent partitioning S_solvent (supporting water, hydroalcoholic mixtures with ethanol %, lipid oil, vinegar).
+      3. First-order Arrhenius thermal degradation kinetics exp(-k(T)*t).
+      4. Organ-level anatomical localization factor.
+
+    Args:
+        compound_smiles: Chemical SMILES string.
+        solvent_mode: Extraction vehicle: "water", "hydroalcoholic", "lipid_oil", "vinegar_acidic".
+        temp_c: Extraction temperature in Celsius.
+        ph: Solvent pH.
+        duration_min: Contact/boiling time in minutes.
+        ethanol_pct: Ethanol volume percentage [0.0, 95.0] for hydroalcoholic mixtures.
+        prepared_part: Anatomical plant organ extracted (e.g. "leaf", "root").
+        documented_organs: Documented organs where compound accumulates.
+
+    Returns:
+        Continuous yield between 0.0 and 1.0.
+    """
+    mol = Chem.MolFromSmiles(compound_smiles)
+    if mol is None:
+        return 0.0
+
+    desc = calculate_descriptors(compound_smiles, ph=ph)
+    if desc is None:
+        return 0.0
+
+    clogp = float(desc["clogp"])
+    tpsa = float(desc["tpsa"])
+    mw = float(desc["mw"])
+
+    # 1. logD at pH
+    logd, _, _ = compute_logd(mol, clogp, ph)
+
+    # 2. Vehicle solubility S_solvent
+    s_mode = solvent_mode.lower().strip()
+    if s_mode == "lipid_oil":
+        s_logd = _sigmoid_min_desirability(logd, min_val=2.5, k=1.5)
+        s_tpsa = _sigmoid_max_desirability(tpsa, max_val=65.0, k=0.03)
+        s_solvent = s_logd * s_tpsa
+    elif s_mode == "vinegar_acidic" or ph <= 3.8:
+        s_logd = _sigmoid_range_desirability(logd, low=-3.0, high=1.8, k_low=0.7, k_high=3.0)
+        s_tpsa = _sigmoid_min_desirability(tpsa, min_val=40.0, k=0.03)
+        s_solvent = s_logd * s_tpsa
+    elif s_mode == "hydroalcoholic":
+        e = float(np.clip(ethanol_pct, 0.0, 95.0))
+        low_bound = -2.5 + (e / 95.0) * 2.0
+        high_bound = 2.0 + (e / 95.0) * 4.0
+        min_tpsa = 60.0 - (e / 95.0) * 45.0
+        s_logd = _sigmoid_range_desirability(logd, low=low_bound, high=high_bound, k_low=0.8, k_high=1.5)
+        s_tpsa = _sigmoid_min_desirability(tpsa, min_val=min_tpsa, k=0.03)
+        s_solvent = s_logd * s_tpsa
+    else:  # water
+        s_logd = _sigmoid_range_desirability(logd, low=-2.5, high=2.0, k_low=0.8, k_high=3.0)
+        s_tpsa = _sigmoid_min_desirability(tpsa, min_val=60.0, k=0.03)
+        s_solvent = s_logd * s_tpsa
+
+    # 3. Arrhenius thermal survival
+    survival_fraction, _, _ = compute_arrhenius_survival(
+        mol=mol, temp_c=temp_c, duration_min=duration_min, mw=mw, tpsa=tpsa
+    )
+
+    # 4. Organ factor
+    organs = documented_organs if documented_organs is not None else []
+    organ_factor = compute_organ_factor(prepared_part, organs)
+
+    # 5. Final yield
+    yield_val = float(np.clip(s_solvent * survival_fraction * organ_factor, 0.0, 1.0))
+    return round(yield_val, 4)
 
 
 # ==============================================================================
