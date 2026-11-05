@@ -639,7 +639,8 @@ def main() -> None:
     st.subheader("Knowledge Graph")
     html, n_nodes, n_edges = build_graph_html(records_json, cfg["threshold"], cfg["show_excluded"])
     st.caption(f"{n_nodes} nodes, {n_edges} edges. Green = plant, blue = preparation, orange = indication, "
-               "violet = plausible compound, grey = excluded, red = toxic alert.")
+               "violet = plausible compound, grey = excluded, red = toxic alert, gold = macromolecular target. "
+               "⭐ Thick emerald edges = Validated Mechanistic Paths (S_ext ≥ 0.50, Alignment ≥ 0.60).")
     components.html(html, height=700, scrolling=True)
 
 

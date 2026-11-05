@@ -59,6 +59,17 @@ from src.graph_builder import (
     COLOR_COMPOUND_PLAUSIBLE,
     COLOR_COMPOUND_EXCLUDED,
     COLOR_COMPOUND_TOXIN,
+    COLOR_TARGET,
+    COLOR_VALIDATED_PATH,
+)
+from src.mechanism import (
+    INDICATION_SEMANTIC_CLUSTERS,
+    CURATED_BIOACTIVITY_KB,
+    fetch_chembl_targets,
+    get_targets_for_compound,
+    score_mechanistic_alignment,
+    calculate_preparation_mechanistic_validation,
+    validate_mechanistic_path,
 )
 
 __all__ = [
@@ -116,4 +127,14 @@ __all__ = [
     "COLOR_COMPOUND_PLAUSIBLE",
     "COLOR_COMPOUND_EXCLUDED",
     "COLOR_COMPOUND_TOXIN",
+    "COLOR_TARGET",
+    "COLOR_VALIDATED_PATH",
+    # Mechanism
+    "INDICATION_SEMANTIC_CLUSTERS",
+    "CURATED_BIOACTIVITY_KB",
+    "fetch_chembl_targets",
+    "get_targets_for_compound",
+    "score_mechanistic_alignment",
+    "calculate_preparation_mechanistic_validation",
+    "validate_mechanistic_path",
 ]

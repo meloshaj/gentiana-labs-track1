@@ -15,6 +15,8 @@ from src.graph_builder import (
     COLOR_COMPOUND_PLAUSIBLE,
     COLOR_COMPOUND_EXCLUDED,
     COLOR_COMPOUND_TOXIN,
+    COLOR_TARGET,
+    COLOR_VALIDATED_PATH,
 )
 
 
@@ -194,7 +196,7 @@ def test_to_pyvis_export(tmp_path: Path):
         preparation_type="oil_maceration",
         solvent_class="lipid_oil",
         thermal_regime="warm_steep",
-        verbatim_indication="burns",
+        verbatim_indication="burns and wounds",
         administration_route="topical",
         verbatim_quote="Steep flowers in oil.",
         extraction_confidence=0.88,
@@ -211,3 +213,80 @@ def test_to_pyvis_export(tmp_path: Path):
     assert COLOR_PLANT in html_content
     assert COLOR_PREPARATION in html_content
     assert COLOR_INDICATION in html_content
+    assert COLOR_TARGET in html_content
+    assert COLOR_VALIDATED_PATH in html_content
+
+
+def test_target_nodes_and_validated_mechanistic_paths():
+    """Verify Target nodes and validated mechanistic path edges (S_ext >= 0.50, alignment >= 0.60)."""
+    builder = DecoctionGraphBuilder()
+    record = EthnoPreparationRecord(
+        verbatim_plant_name="Hypericum perforatum",
+        plant_part="flower",
+        preparation_type="oil_maceration",
+        solvent_class="lipid_oil",
+        thermal_regime="warm_steep",
+        verbatim_indication="severe skin wounds and burns",
+        administration_route="topical",
+        verbatim_quote="Flowering tops steeped in olive oil under sunlight.",
+        extraction_confidence=0.98,
+    )
+    plant_id, prep_id, ind_id, comp_ids = builder.add_extraction_record(record)
+    g = builder.graph
+
+    # Verify Target node TRPC6 exists
+    assert "target:TRPC6" in g
+    trpc6_node = g.nodes["target:TRPC6"]
+    assert trpc6_node["node_type"] == "target"
+    assert trpc6_node["gene_symbol"] == "TRPC6"
+    assert trpc6_node["action_type"] == "modulator"
+
+    # Find Hyperforin compound node
+    hyp_comp_id = next(c for c in comp_ids if "KGSZHKRKHXOAMG" in c)
+
+    # Verify (Compound) -> [MODULATES] -> (Target)
+    assert g.has_edge(hyp_comp_id, "target:TRPC6")
+    modulates_edges = list(g.get_edge_data(hyp_comp_id, "target:TRPC6").values())
+    assert any(e["edge_type"] == "MODULATES" for e in modulates_edges)
+
+    # Verify (Target) -> [EXPLAINS_EFFICACY_IN] -> (Indication)
+    assert g.has_edge("target:TRPC6", ind_id)
+    explains_edges = list(g.get_edge_data("target:TRPC6", ind_id).values())
+    assert any(e["edge_type"] == "EXPLAINS_EFFICACY_IN" for e in explains_edges)
+
+    # Hyperforin in oil maceration for wounds is a VALIDATED path (S_ext > 0.85, alignment > 0.90)
+    solubilizes_edges = list(g.get_edge_data(prep_id, hyp_comp_id).values())
+    assert any(e.get("is_validated_path") is True for e in solubilizes_edges)
+    assert any(e.get("is_validated_path") is True for e in modulates_edges)
+    assert any(e.get("is_validated_path") is True for e in explains_edges)
+
+    # Preparation node carries aggregate mechanistic validation score
+    assert g.nodes[prep_id]["mechanistic_validation_score"] >= 0.80
+
+
+def test_target_pruning_in_filtered_subgraph():
+    """Verify that when a compound is pruned, its isolated target nodes are pruned from the subgraph."""
+    builder = DecoctionGraphBuilder()
+    # Gentiana lutea in water: Gentiopicroside is high (>0.75), Loganic acid has lower plausibility
+    record = EthnoPreparationRecord(
+        verbatim_plant_name="Gentiana lutea",
+        plant_part="root",
+        preparation_type="decoction",
+        solvent_class="water",
+        thermal_regime="boiling_prolonged",
+        verbatim_indication="digestive weakness and loss of appetite",
+        administration_route="oral",
+        verbatim_quote="Boil gentian root in spring water.",
+        extraction_confidence=0.95,
+    )
+    builder.add_extraction_record(record)
+
+    full_graph = builder.graph
+    # Subgraph filtering with min_plausibility 0.40 retains TAS2R38 / TAS2R50 (bitter taste receptors)
+    subgraph = builder.get_filtered_subgraph(min_plausibility=0.40)
+
+    target_nodes_subgraph = [
+        n for n, d in subgraph.nodes(data=True) if d.get("node_type") == "target"
+    ]
+    assert len(target_nodes_subgraph) > 0
+    assert any("TAS2R" in t for t in target_nodes_subgraph)

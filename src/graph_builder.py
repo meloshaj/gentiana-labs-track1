@@ -19,10 +19,17 @@ from src.schemas import (
     EthnoPreparationRecord,
     PhytochemicalRecord,
     TaxonResolution,
+    TargetMechanismRecord,
 )
 from src.taxonomy import resolve_plant_name
 from src.cheminformatics import calculate_extraction_plausibility, map_plausibility_to_verdict
 from src.lotus_retriever import enrich_taxon_compounds
+from src.mechanism import (
+    get_targets_for_compound,
+    score_mechanistic_alignment,
+    validate_mechanistic_path,
+    calculate_preparation_mechanistic_validation,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +43,8 @@ COLOR_INDICATION = "#E65100"   # Orange
 COLOR_COMPOUND_PLAUSIBLE = "#7B1FA2"  # Violet
 COLOR_COMPOUND_EXCLUDED = "#757575"   # Grey
 COLOR_COMPOUND_TOXIN = "#C62828"      # Red
+COLOR_TARGET = "#D97706"       # Gold / Amber
+COLOR_VALIDATED_PATH = "#10B981"  # Glowing Emerald / Mint
 
 # ==============================================================================
 # MeSH Semantic Indication Mapper
@@ -200,6 +209,20 @@ class DecoctionGraphBuilder:
             comp_node_id = f"compound:{comp.inchi_key}"
             compound_node_ids.append(comp_node_id)
 
+            # Ensure targets are populated (hybrid KB + ChEMBL fallback)
+            if not comp.known_targets:
+                comp.known_targets = get_targets_for_compound(comp.compound_name, comp.inchi_key)
+
+            # Compute mechanistic alignment score against verbatim indication
+            alignment = score_mechanistic_alignment(comp.known_targets, record.verbatim_indication)
+            comp.mechanistic_alignment_score = alignment
+            is_validated = validate_mechanistic_path(
+                comp.extraction_plausibility_score,
+                alignment,
+                min_plausibility=0.50,
+                min_alignment=0.60,
+            )
+
             if comp_node_id not in self.graph:
                 self.graph.add_node(
                     comp_node_id,
@@ -224,7 +247,8 @@ class DecoctionGraphBuilder:
                     thermal_survival_fraction=comp.thermal_survival_fraction,
                     documented_organs=comp.documented_organs,
                     organ_match_factor=comp.organ_match_factor,
-                    mechanistic_alignment_score=comp.mechanistic_alignment_score,
+                    mechanistic_alignment_score=alignment,
+                    is_validated_path=is_validated,
                     known_targets=[t.model_dump() for t in comp.known_targets],
                 )
 
@@ -240,7 +264,54 @@ class DecoctionGraphBuilder:
                 organ_match_factor=comp.organ_match_factor,
                 thermal_survival_fraction=comp.thermal_survival_fraction,
                 logd_at_recipe_ph=comp.logd_at_recipe_ph,
+                alignment_score=alignment,
+                is_validated_path=is_validated,
             )
+
+            # Connect compound to each modulated target and link target to indication
+            for target in comp.known_targets:
+                target_node_id = f"target:{target.gene_symbol}"
+                if target_node_id not in self.graph:
+                    self.graph.add_node(
+                        target_node_id,
+                        node_type="target",
+                        label=target.gene_symbol,
+                        gene_symbol=target.gene_symbol,
+                        target_name=target.target_name,
+                        chembl_target_id=target.chembl_target_id,
+                        action_type=target.action_type,
+                        bioactivity_potency_um=target.bioactivity_potency_um,
+                        therapeutic_pathway=target.therapeutic_pathway,
+                        symptom_relevance_score=target.symptom_relevance_score,
+                    )
+
+                # (Compound) -> [MODULATES] -> (Target)
+                self.graph.add_edge(
+                    comp_node_id,
+                    target_node_id,
+                    key=f"MODULATES_{comp.inchi_key}_{target.gene_symbol}",
+                    edge_type="MODULATES",
+                    action_type=target.action_type,
+                    potency_um=target.bioactivity_potency_um,
+                    pathway=target.therapeutic_pathway,
+                    is_validated_path=is_validated,
+                )
+
+                # (Target) -> [EXPLAINS_EFFICACY_IN] -> (Indication)
+                self.graph.add_edge(
+                    target_node_id,
+                    indication_node_id,
+                    key=f"EXPLAINS_{target.gene_symbol}_{indication_node_id}",
+                    edge_type="EXPLAINS_EFFICACY_IN",
+                    relevance_score=target.symptom_relevance_score,
+                    pathway=target.therapeutic_pathway,
+                    is_validated_path=is_validated,
+                )
+
+        # Store aggregate preparation-level mechanistic validation score
+        m_prep = calculate_preparation_mechanistic_validation(enriched_compounds, record.verbatim_indication)
+        if prep_node_id in self.graph:
+            self.graph.nodes[prep_node_id]["mechanistic_validation_score"] = m_prep
 
         return plant_node_id, prep_node_id, indication_node_id, compound_node_ids
 
@@ -252,7 +323,8 @@ class DecoctionGraphBuilder:
         """Return a pruned subgraph filtering compounds by plausibility and toxicity alerts.
 
         Retains only compounds meeting or exceeding min_plausibility for the specified
-        preparation regime. If exclude_toxic is True, prunes compounds with active toxicity alerts.
+        preparation regime, along with their connected target mechanism paths. If exclude_toxic
+        is True, prunes compounds with active toxicity alerts and their isolated targets.
 
         Args:
             min_plausibility: Minimum extraction plausibility score required for compound retention (default: 0.40).
@@ -263,18 +335,19 @@ class DecoctionGraphBuilder:
         """
         subgraph = nx.MultiDiGraph()
 
-        # 1. Add non-compound nodes (Plants, Preparations, Indications)
+        # 1. Add non-compound, non-target nodes (Plants, Preparations, Indications)
         for node, attrs in self.graph.nodes(data=True):
             if attrs.get("node_type") in ("plant", "preparation", "indication"):
                 subgraph.add_node(node, **attrs)
 
         # 2. Add structural topology edges (HAS_PREPARATION, TREATS)
         for u, v, key, edge_data in self.graph.edges(keys=True, data=True):
-            if edge_data.get("edge_type") != "SOLUBILIZES":
+            if edge_data.get("edge_type") in ("HAS_PREPARATION", "TREATS"):
                 if u in subgraph and v in subgraph:
                     subgraph.add_edge(u, v, key=key, **edge_data)
 
         # 3. Filter SOLUBILIZES edges and compound nodes
+        surviving_compounds: Set[str] = set()
         for u, v, key, edge_data in self.graph.edges(keys=True, data=True):
             if edge_data.get("edge_type") == "SOLUBILIZES":
                 score = float(edge_data.get("plausibility_score", 0.0))
@@ -290,6 +363,23 @@ class DecoctionGraphBuilder:
                 if v not in subgraph:
                     subgraph.add_node(v, **comp_attrs)
                 subgraph.add_edge(u, v, key=key, **edge_data)
+                surviving_compounds.add(v)
+
+        # 4. Filter MODULATES edges and Target nodes connected to surviving compounds
+        surviving_targets: Set[str] = set()
+        for u, v, key, edge_data in self.graph.edges(keys=True, data=True):
+            if edge_data.get("edge_type") == "MODULATES" and u in surviving_compounds:
+                target_attrs = self.graph.nodes[v]
+                if v not in subgraph:
+                    subgraph.add_node(v, **target_attrs)
+                subgraph.add_edge(u, v, key=key, **edge_data)
+                surviving_targets.add(v)
+
+        # 5. Connect surviving targets to indications via EXPLAINS_EFFICACY_IN
+        for u, v, key, edge_data in self.graph.edges(keys=True, data=True):
+            if edge_data.get("edge_type") == "EXPLAINS_EFFICACY_IN":
+                if u in surviving_targets and v in subgraph:
+                    subgraph.add_edge(u, v, key=key, **edge_data)
 
         return subgraph
 
@@ -413,6 +503,22 @@ class DecoctionGraphBuilder:
                     f"InChIKey: {attrs.get('inchi_key')}"
                 )
 
+            elif n_type == "target":
+                color = COLOR_TARGET
+                size = 20
+                shape = "hexagon"
+                potency = attrs.get("bioactivity_potency_um")
+                pot_str = f"{potency} µM" if potency is not None else "N/A"
+                title = (
+                    f"<b>Macromolecular Protein Target</b><br>"
+                    f"Gene: <b>{attrs.get('gene_symbol')}</b><br>"
+                    f"Target Name: {attrs.get('target_name')}<br>"
+                    f"Action: {attrs.get('action_type')}<br>"
+                    f"Potency: {pot_str}<br>"
+                    f"Pathway: {attrs.get('therapeutic_pathway')}<br>"
+                    f"ChEMBL ID: {attrs.get('chembl_target_id')}"
+                )
+
             else:
                 color = "#9E9E9E"
                 size = 15
@@ -431,6 +537,9 @@ class DecoctionGraphBuilder:
         # 2. Add Edges with Styling & Labels
         for u, v, key, edge_data in target_graph.edges(keys=True, data=True):
             e_type = edge_data.get("edge_type", "")
+            is_val = bool(edge_data.get("is_validated_path", False))
+            val_tag = "<br><b style='color:#10B981;'>⭐ VALIDATED MECHANISTIC PATH (S_ext &ge; 0.50, Alignment &ge; 0.60)</b>" if is_val else ""
+
             if e_type == "HAS_PREPARATION":
                 net.add_edge(
                     u,
@@ -452,13 +561,52 @@ class DecoctionGraphBuilder:
             elif e_type == "SOLUBILIZES":
                 score = edge_data.get("plausibility_score", 0.0)
                 status = edge_data.get("status", "unknown")
-                edge_color = COLOR_COMPOUND_PLAUSIBLE if score >= min_plausibility else COLOR_COMPOUND_EXCLUDED
+                if is_val:
+                    edge_color = COLOR_VALIDATED_PATH
+                    width = 4.5
+                elif score >= min_plausibility:
+                    edge_color = COLOR_COMPOUND_PLAUSIBLE
+                    width = 2.0
+                else:
+                    edge_color = COLOR_COMPOUND_EXCLUDED
+                    width = 1.0
+
                 net.add_edge(
                     u,
                     v,
-                    title=f"SOLUBILIZES (Score: {score:.4f}, Verdict: {status})",
+                    title=f"SOLUBILIZES (Score: {score:.4f}, Verdict: {status}){val_tag}",
                     label=f"{score:.2f} [{status}]",
                     color=edge_color,
+                    width=width,
+                    arrows="to",
+                )
+            elif e_type == "MODULATES":
+                edge_color = COLOR_VALIDATED_PATH if is_val else COLOR_TARGET
+                width = 4.0 if is_val else 1.5
+                potency = edge_data.get("potency_um")
+                pot_str = f" ({potency} µM)" if potency is not None else ""
+
+                net.add_edge(
+                    u,
+                    v,
+                    title=f"MODULATES: {edge_data.get('action_type', '')}{pot_str}<br>Pathway: {edge_data.get('pathway', '')}{val_tag}",
+                    label=f"{edge_data.get('action_type', '')}{pot_str}",
+                    color=edge_color,
+                    width=width,
+                    arrows="to",
+                )
+            elif e_type == "EXPLAINS_EFFICACY_IN":
+                edge_color = COLOR_VALIDATED_PATH if is_val else "#F59E0B"
+                width = 4.0 if is_val else 1.5
+                rel = edge_data.get("relevance_score", 0.0)
+
+                net.add_edge(
+                    u,
+                    v,
+                    title=f"EXPLAINS_EFFICACY_IN (Relevance: {rel:.2f})<br>Pathway: {edge_data.get('pathway', '')}{val_tag}",
+                    label=f"EXPLAINS ({rel:.2f})",
+                    color=edge_color,
+                    width=width,
                     arrows="to",
                 )
             else:
