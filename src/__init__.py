@@ -72,6 +72,18 @@ from src.mechanism import (
     calculate_preparation_mechanistic_validation,
     validate_mechanistic_path,
 )
+from src.pdf_ingestor import (
+    extract_text_chunks_from_pdf,
+    extract_text_chunks_from_text,
+    extract_offline_from_text,
+    deduplicate_records,
+    process_document_chunks,
+    build_atlas_dataset,
+    export_atlas_csv,
+    export_atlas_jsonld,
+    get_sample_corpus_text,
+    get_sample_corpus_pdf_bytes,
+)
 
 __all__ = [
     # Schemas
@@ -139,4 +151,15 @@ __all__ = [
     "score_mechanistic_alignment",
     "calculate_preparation_mechanistic_validation",
     "validate_mechanistic_path",
+    # PDF Ingestor & Batch Corpus Miner
+    "extract_text_chunks_from_pdf",
+    "extract_text_chunks_from_text",
+    "extract_offline_from_text",
+    "deduplicate_records",
+    "process_document_chunks",
+    "build_atlas_dataset",
+    "export_atlas_csv",
+    "export_atlas_jsonld",
+    "get_sample_corpus_text",
+    "get_sample_corpus_pdf_bytes",
 ]

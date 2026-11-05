@@ -239,6 +239,11 @@ class EthnoPreparationRecord(DecoctionBaseModel):
         description="Optional notes documenting orthographic, botanical, linguistic, or methodological ambiguities.",
         examples=["Name may refer to Gentiana purpurea in regional dialects."],
     )
+    source_citation: Optional[str] = Field(
+        default=None,
+        description="Source document publication citation, title, or archival page number.",
+        examples=["Alpine Herbal Pharmacopeia (1885) (Page 1)"],
+    )
 
 
 class TaxonResolution(DecoctionBaseModel):

@@ -199,3 +199,45 @@ def test_compute_optimization_grid_yield_and_selectivity():
     # Selectivity in root is substantially worse than in leaf due to PA co-extraction
     assert grid_root["best_score"] < grid_leaf["best_score"]
 
+
+def test_batch_corpus_miner_tab_integration():
+    """Verify batch corpus miner pipeline components integrated into the Streamlit app."""
+    from src.pdf_ingestor import (
+        build_atlas_dataset,
+        export_atlas_csv,
+        export_atlas_jsonld,
+        extract_text_chunks_from_text,
+        get_sample_corpus_text,
+        process_document_chunks,
+    )
+
+    sample_text = get_sample_corpus_text()
+    chunks = extract_text_chunks_from_text(sample_text)
+    assert len(chunks) == 3
+
+    batch = process_document_chunks(
+        chunks=chunks,
+        document_title="Alpine Herbal (1885)",
+        region="Swiss Alps",
+        force_offline=True,
+    )
+    assert len(batch.records) >= 6
+
+    atlas = build_atlas_dataset(batch)
+    df = atlas["atlas_df"]
+    metrics = atlas["metrics"]
+
+    assert not df.empty
+    assert metrics["total_pages_scanned"] == 3
+    assert metrics["unique_taxa_count"] >= 5
+
+    csv_data = export_atlas_csv(df)
+    assert len(csv_data) > 500
+
+    jsonld_data = export_atlas_jsonld(batch, atlas)
+    assert len(jsonld_data) > 1000
+    parsed = json.loads(jsonld_data)
+    assert "@context" in parsed
+    assert "@graph" in parsed
+
+

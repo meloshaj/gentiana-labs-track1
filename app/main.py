@@ -35,6 +35,15 @@ from src.extraction import extract_from_text, mock_extract_hypericum_sample
 from src.graph_builder import DecoctionGraphBuilder
 from src.lotus_retriever import enrich_taxon_compounds, get_compounds_for_taxon
 from src.mechanism import get_targets_for_compound
+from src.pdf_ingestor import (
+    build_atlas_dataset,
+    export_atlas_csv,
+    export_atlas_jsonld,
+    extract_text_chunks_from_pdf,
+    extract_text_chunks_from_text,
+    get_sample_corpus_text,
+    process_document_chunks,
+)
 from src.schemas import EthnoPreparationRecord, TaxonResolution
 from src.taxonomy import resolve_plant_name
 
@@ -1132,14 +1141,262 @@ def render_recipe_optimizer() -> None:
     st.markdown(rec_html, unsafe_allow_html=True)
 
 
+def render_batch_corpus_miner() -> None:
+    st.subheader("📄 Archival PDF & Batch Corpus Miner")
+    st.markdown(
+        "Ingest multi-page ethnobotanical survey papers, historical pharmacopeias, and archival field notes "
+        "(`.pdf`, `.txt`). The engine parses pages, preserves strict page-number provenance (`Page X`), "
+        "resolves botanical taxonomy via GBIF, maps chemical constituents via LOTUS, and validates macromolecular "
+        "target pathways via ChEMBL to synthesize an interactive **Regional Ethnopharmacology Atlas**."
+    )
+
+    # Ingestion Controls
+    col_up, col_sample = st.columns([1.6, 1.0])
+
+    with col_up:
+        uploaded_file = st.file_uploader(
+            "Upload Ethnobotanical Survey PDF or Herbal (.pdf, .txt)",
+            type=["pdf", "txt"],
+            key="corpus_file_uploader",
+            help="Supports multi-page research surveys and raw archival herbal transcriptions.",
+        )
+
+    with col_sample:
+        st.markdown("##### ⚡ Quick Demonstration")
+        st.caption("No document handy? Test the multi-page chunked pipeline with a curated 3-page historical herbal survey:")
+        if st.button("Load Archival Survey Herbal (3 Pages)", type="secondary", key="btn_load_demo_corpus"):
+            st.session_state["corpus_file_name"] = "Alpine_and_Maritime_Herbal_Survey_1885.txt"
+            st.session_state["corpus_file_bytes"] = get_sample_corpus_text().encode("utf-8")
+            st.session_state["corpus_doc_title"] = "Alpine & Maritime Ethnobotanical Survey (1885)"
+            st.session_state["corpus_region"] = "Swiss Alps & Mediterranean"
+            st.success("Loaded 3-page historical herbal survey into session state!")
+
+    # Check active document
+    file_bytes: Optional[bytes] = None
+    file_name = "sample_document.txt"
+
+    if uploaded_file is not None:
+        file_bytes = uploaded_file.getvalue()
+        file_name = uploaded_file.name
+        default_title = Path(file_name).stem.replace("_", " ").title()
+    elif "corpus_file_bytes" in st.session_state:
+        file_bytes = st.session_state["corpus_file_bytes"]
+        file_name = st.session_state.get("corpus_file_name", "sample_document.txt")
+        default_title = st.session_state.get("corpus_doc_title", "Alpine & Maritime Survey (1885)")
+    else:
+        default_title = "Alpine & Maritime Herbal Survey (1885)"
+
+    st.markdown("---")
+    st.markdown("##### 🏷️ Archival Provenance & Ingestion Parameters")
+    c1, c2, c3 = st.columns([1.5, 1.2, 1.0])
+
+    with c1:
+        doc_title = st.text_input("Document Title / Archival Reference", value=default_title, key="corpus_title")
+    with c2:
+        doc_region = st.text_input(
+            "Geographic or Cultural Region",
+            value=st.session_state.get("corpus_region", "European Alps / Mediterranean"),
+            key="corpus_region_input",
+        )
+    with c3:
+        has_key = bool(os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY"))
+        offline_toggle = st.toggle(
+            "Fast Offline Demo Mode",
+            value=(not has_key),
+            help="Enables rapid deterministic rule-based extraction for instant evaluation without LLM API quotas.",
+        )
+
+    btn_mine = st.button("🚀 Ingest Document & Synthesize Ethnopharmacology Atlas", type="primary", key="btn_run_mining")
+
+    if btn_mine:
+        if file_bytes is None:
+            st.warning("Please upload a PDF / TXT document or click 'Load Archival Survey Herbal (3 Pages)' above.")
+            return
+
+        pbar = st.progress(0.0)
+        status = st.empty()
+
+        # Step 1: Chunk document
+        status.info("Parsing document pages and generating chunks with provenance metadata...")
+        pbar.progress(0.15)
+
+        is_pdf = file_name.lower().endswith(".pdf")
+        if is_pdf:
+            chunks = extract_text_chunks_from_pdf(file_bytes)
+        else:
+            raw_text = file_bytes.decode("utf-8", errors="replace")
+            chunks = extract_text_chunks_from_text(raw_text)
+
+        if not chunks:
+            st.error("Could not extract any readable text or pages from the uploaded file.")
+            return
+
+        pbar.progress(0.35)
+        status.info(f"Generated {len(chunks)} text chunks across document pages. Mining ethnobotanical preparation records...")
+
+        # Step 2: Mine chunks
+        def progress_tracker(done: int, total: int, msg: str) -> None:
+            pct = 0.35 + (float(done) / max(total, 1)) * 0.35
+            pbar.progress(min(pct, 0.70))
+            status.info(f"Mining chunks: {msg}")
+
+        batch = process_document_chunks(
+            chunks=chunks,
+            document_title=doc_title,
+            region=doc_region,
+            progress_callback=progress_tracker,
+            force_offline=offline_toggle,
+        )
+
+        pbar.progress(0.70)
+        status.info(f"Mined {len(batch.records)} preparation records. Resolving taxonomy, LOTUS phytochemistry, and ChEMBL target validation...")
+
+        # Step 3: Synthesize Atlas & Multi-document Knowledge Graph
+        def atlas_tracker(pct: float, msg: str) -> None:
+            pbar.progress(0.70 + pct * 0.28)
+            status.info(f"Synthesizing Atlas: {msg}")
+
+        atlas_result = build_atlas_dataset(batch, progress_callback=atlas_tracker)
+
+        pbar.progress(1.0)
+        status.success(f"Atlas synthesized successfully! Mined {len(batch.records)} preparations across {atlas_result['metrics']['total_pages_scanned']} page(s).")
+
+        st.session_state["corpus_atlas_result"] = {
+            "atlas": atlas_result,
+            "batch": batch,
+            "doc_title": doc_title,
+        }
+
+    # Render results if available
+    result_data = st.session_state.get("corpus_atlas_result")
+    if result_data:
+        atlas = result_data["atlas"]
+        batch = result_data["batch"]
+        df: pd.DataFrame = atlas["atlas_df"]
+        metrics = atlas["metrics"]
+
+        st.markdown("---")
+        st.markdown(f"### 🗺️ Regional Ethnopharmacology Atlas: *{result_data['doc_title']}*")
+
+        # Top Metrics Row
+        m1, m2, m3, m4, m5 = st.columns(5)
+        m1.metric("📄 Pages Scanned", f"{metrics['total_pages_scanned']}")
+        m2.metric("🌿 Taxa Resolved", f"{metrics['unique_taxa_count']}")
+        m3.metric("🥣 Preparations", f"{metrics['distinct_preparations_count']}")
+        m4.metric("⭐ Validated Links", f"{metrics['validated_mechanistic_links_count']}", delta="+mechanistic")
+        m5.metric(
+            "⚠️ Toxicity Alerts",
+            f"{metrics['toxicity_alerts_count']}",
+            delta=f"{metrics['toxicity_alerts_count']} flagged" if metrics['toxicity_alerts_count'] > 0 else "None",
+            delta_color="inverse" if metrics['toxicity_alerts_count'] > 0 else "off",
+        )
+
+        # Export row
+        col_dl1, col_dl2 = st.columns(2)
+        csv_data = export_atlas_csv(df)
+        jsonld_data = export_atlas_jsonld(batch, atlas)
+
+        col_dl1.download_button(
+            "📥 Download Atlas Table (CSV)",
+            data=csv_data,
+            file_name=f"{re.sub(r'[^a-zA-Z0-9]', '_', result_data['doc_title'])}_atlas.csv",
+            mime="text/csv",
+            key="dl_atlas_csv",
+            use_container_width=True,
+        )
+        col_dl2.download_button(
+            "🕸️ Download Knowledge Graph (JSON-LD)",
+            data=jsonld_data,
+            file_name=f"{re.sub(r'[^a-zA-Z0-9]', '_', result_data['doc_title'])}_kg.jsonld",
+            mime="application/ld+json",
+            key="dl_atlas_jsonld",
+            use_container_width=True,
+        )
+
+        # Display views: Table and PyVis Graph
+        tab_tbl, tab_kg = st.tabs(["📋 Enriched Ethnopharmacology Atlas Table", "🌐 Multi-Document Knowledge Graph"])
+
+        with tab_tbl:
+            # Filter controls
+            c_f1, c_f2 = st.columns(2)
+            pages = ["All Pages"] + sorted(list(df["Source Page"].unique()))
+            chosen_page = c_f1.selectbox("Filter by Source Page", pages, index=0, key="filter_page")
+
+            taxa = ["All Taxa"] + sorted(list(df["Accepted Taxon"].unique()))
+            chosen_taxon = c_f2.selectbox("Filter by Plant Taxon", taxa, index=0, key="filter_taxon")
+
+            filtered_df = df.copy()
+            if chosen_page != "All Pages":
+                filtered_df = filtered_df[filtered_df["Source Page"] == chosen_page]
+            if chosen_taxon != "All Taxa":
+                filtered_df = filtered_df[filtered_df["Accepted Taxon"] == chosen_taxon]
+
+            show_cols = [
+                "Source Page", "Plant Name", "Accepted Taxon", "Plant Part",
+                "Preparation", "Solvent", "Thermal Regime", "Historical Indication",
+                "Primary Bioactive", "Top Target (Gene)", "Extraction Plausibility",
+                "Mechanistic Status", "Toxicity Alerts"
+            ]
+
+            def highlight_validated(val: str) -> str:
+                if "Validated" in str(val):
+                    return "background-color: #D1FAE5; color: #065F46; font-weight: 700; text-align: center;"
+                return "text-align: center;"
+
+            def highlight_tox(val: str) -> str:
+                if val and val != "None":
+                    return "background-color: #FEE2E2; color: #991B1B; font-weight: 600;"
+                return ""
+
+            styled_df = (
+                filtered_df[show_cols]
+                .style
+                .map(highlight_validated, subset=["Mechanistic Status"])
+                .map(highlight_tox, subset=["Toxicity Alerts"])
+            )
+
+            st.dataframe(
+                styled_df,
+                width="stretch",
+                hide_index=True,
+                column_config={
+                    "Extraction Plausibility": st.column_config.ProgressColumn(
+                        "Extraction Plausibility", min_value=0.0, max_value=1.0, format="%.2f"
+                    ),
+                    "Mechanistic Status": st.column_config.TextColumn(width="medium"),
+                    "Toxicity Alerts": st.column_config.TextColumn(width="medium"),
+                },
+            )
+
+        with tab_kg:
+            st.caption(
+                "Multi-document knowledge graph integrating all mined plants, preparations, LOTUS phytochemicals, "
+                "and ChEMBL macromolecular targets across document pages. "
+                "⭐ Thick emerald edges = Validated Mechanistic Paths ($S_{\\text{ext}} \\ge 0.50$, Alignment $\\ge 0.60$)."
+            )
+            builder: DecoctionGraphBuilder = atlas["graph_builder"]
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                cwd = os.getcwd()
+                os.chdir(tmp_dir)
+                try:
+                    pyvis_path = builder.to_pyvis(str(Path(tmp_dir) / "corpus_graph.html"), min_plausibility=0.35)
+                    kg_html = Path(pyvis_path).read_text(encoding="utf-8")
+                finally:
+                    os.chdir(cwd)
+
+            inlined_kg_html = _inline_local_assets(kg_html)
+            components.html(inlined_kg_html, height=720, scrolling=True)
+
+
 def main() -> None:
     st.set_page_config(page_title="DecoctionGraph | Gentiana Labs", page_icon="🌿", layout="wide")
     render_header()
     cfg = sidebar()
 
-    tab_mining, tab_optimizer = st.tabs([
+    tab_mining, tab_optimizer, tab_corpus = st.tabs([
         "🌿 Ethnobotanical Literature Mining & Knowledge Graph",
         "🧪 In Silico Recipe Optimizer (What-If Formulator)",
+        "📄 Archival PDF & Batch Corpus Miner",
     ])
 
     with tab_mining:
@@ -1147,6 +1404,9 @@ def main() -> None:
 
     with tab_optimizer:
         render_recipe_optimizer()
+
+    with tab_corpus:
+        render_batch_corpus_miner()
 
 
 if __name__ == "__main__":
