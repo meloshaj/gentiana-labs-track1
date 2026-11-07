@@ -23,7 +23,10 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from rdkit import Chem
-from rdkit.Chem.Draw import rdMolDraw2D
+try:
+    from rdkit.Chem.Draw import rdMolDraw2D
+except ImportError:
+    rdMolDraw2D = None
 import streamlit as st
 def render_iframe_html(html_content: str, height: int = 720) -> None:
     """Render HTML content using st.iframe (preferred) with fallback for older Streamlit versions."""
@@ -338,6 +341,8 @@ def analyze_records(records_json: str) -> List[Dict[str, Any]]:
 
 def smiles_to_svg(smiles: str, width: int = 260, height: int = 120) -> str:
     """Render a clean 2D skeletal SVG for a given SMILES string styled for dark theme."""
+    if rdMolDraw2D is None:
+        return ""
     try:
         mol = Chem.MolFromSmiles(smiles)
         if mol is None:
