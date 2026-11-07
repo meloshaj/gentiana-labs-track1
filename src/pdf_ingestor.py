@@ -101,6 +101,16 @@ def _split_into_sections_or_paragraphs(text: str) -> List[str]:
     if not normalized:
         return []
 
+    # PDF text extraction sometimes inserts a blank paragraph boundary after
+    # a dangling preposition before the botanical binomial (for example,
+    # "trunk bark of\n\nCinchona pubescens"). Rejoin this wrapped phrase so
+    # organ context remains available to the taxon scoped extractor.
+    normalized = re.sub(
+        r"\b(of|from|in|with)[ \t]*\n[ \t]*\n(?=[A-Z][a-z-]+\s+[a-z][a-z-]+\b)",
+        r"\1 ",
+        normalized,
+    )
+
     split_pattern = (
         r"(?:\n\s*\n+|"
         r"(?<=\n)(?=(?:(?:[0-9]+\.[0-9]+|[0-9]+\.)\s+|[#]{1,4}\s+|Section\s+\d+|Chapter\s+\d+))|"
@@ -119,7 +129,16 @@ def _pack_blocks_into_chunks(
     overlap: int = 250,
 ) -> List[Dict[str, Any]]:
     """Greedily pack paragraph/section blocks into chunks up to chunk_size without splitting across blocks."""
-    valid_blocks = [b for b in blocks if not _is_summary_or_table_block(b)]
+    valid_blocks: List[str] = []
+    table_started = False
+    for block in blocks:
+        if _is_summary_or_table_block(block):
+            table_started = True
+            continue
+        if table_started and re.match(r"^(?:Section\s+\d+|Chapter\s+\d+|\d+(?:\.\d+)*\s+)", block, re.IGNORECASE):
+            table_started = False
+        if not table_started:
+            valid_blocks.append(block)
     if not valid_blocks:
         return []
 
@@ -375,6 +394,17 @@ def extract_offline_from_text(
         plant_segments: List[Tuple[str, str]] = []
         for i, (start_idx, taxon) in enumerate(distinct_transitions):
             end_idx = distinct_transitions[i + 1][0] if i + 1 < len(distinct_transitions) else len(block)
+            prefix = block[:start_idx]
+            # PDF line wrapping can put the taxon's repeated name on the next
+            # extracted paragraph after its organ/preparation phrase (e.g.
+            # "powdered trunk bark of\n\nCinchona pubescens"). Keep that
+            # short, directly attached context with the recipe.
+            if len(prefix) <= 240 and re.search(
+                r"\b(?:bark|root|rhizome|leaf|leaves|flower|seed|capsule|latex)\s+of\s*$",
+                prefix,
+                re.IGNORECASE,
+            ):
+                start_idx = 0
             seg_text = block[start_idx:end_idx].strip()
             if seg_text:
                 plant_segments.append((taxon, seg_text))
@@ -386,7 +416,7 @@ def extract_offline_from_text(
             # those as separate atomic units so one preparation cannot mask
             # the other.
             sub_units = re.split(
-                r"(?<=\.)\s+(?=(?:The|Dried|Fresh|Conversely|In later centuries|On the other hand|Alternatively|In contrast)\b)|"
+                r"(?<=[.!?])\s+(?=(?:The|Dried|Fresh|For|Hospital formularies|Historical apothecary|Similarly|In later centuries|On the other hand|Alternatively|In contrast)\b)|"
                 r"\b(?:Conversely|In later centuries|On the other hand|Alternatively|In contrast)\b",
                 seg_text,
                 flags=re.IGNORECASE,
@@ -395,6 +425,14 @@ def extract_offline_from_text(
             for raw_unit in sub_units:
                 unit = raw_unit.strip()
                 if len(unit) < 15:
+                    continue
+                unit = re.sub(r"^[\s,;:]+", "", unit)
+
+                # These phrases describe failed or already prepared remedies,
+                # not a new recipe. Do not turn them into duplicate records.
+                if re.match(r"(?:the\s+)?resulting\b", unit, re.IGNORECASE):
+                    continue
+                if re.search(r"\b(?:incomplete(?:,|\s+)turbid|poorly soluble|loses?\s+(?:its\s+)?(?:acute\s+)?efficacy|warn against)\b", unit, re.IGNORECASE):
                     continue
 
                 # Remove negative vehicle warnings before classifying the
@@ -416,6 +454,15 @@ def extract_offline_from_text(
                 recipe_text = caution_split[0].strip()
                 caution_text = caution_split[1].strip() if len(caution_split) > 1 else ""
                 low = recipe_text.lower()
+
+                # A taxon mention or an effect statement alone is not a
+                # preparation record. Require an explicit preparation/vehicle
+                # cue to avoid manufacturing generic infusions from prose.
+                if not re.search(
+                    r"\b(?:macerat\w*|decoct\w*|decoction|boil\w*|infusion|infus\w*|tea|steep\w*|poultice|compress|bound|wrung|wring\w*|express\w*|juice|tincture|spirit|wine|brandy|olive oil|oil maceration|crushed into)\b",
+                    low,
+                ):
+                    continue
 
                 # A. Plant Part (scoped strictly to recipe clause)
                 if re.search(r"\b(latex|sap|resin|gum)\b", low):
@@ -455,9 +502,9 @@ def extract_offline_from_text(
                 elif re.search(r"\b(steeped?\s+as\s+(?:a\s+)?(?:warm\s+)?aqueous\s+infusion|infusion|tea)\b", low):
                     prep = "infusion"
                     solvent = "water"
-                    thermal = "warm_steep"
+                    thermal = "warm_steep" if re.search(r"\b(warm|hot|80\s*°?c|boiled water)\b", low) else "cold_ambient"
                     route = "oral"
-                    ph, temp_c, dur_min = 7.0, 80.0, 30.0
+                    ph, temp_c, dur_min = 7.0, 80.0 if thermal == "warm_steep" else 25.0, 10.0
                 elif re.search(r"\b(oil maceration|olive oil|in oil|oil)\b", low) and not re.search(r"\bessential oil\b", low):
                     prep = "oil_maceration"
                     solvent = "lipid_oil"
@@ -465,11 +512,11 @@ def extract_offline_from_text(
                     route = "topical"
                     ph, temp_c, dur_min = 7.0, 60.0 if thermal == "warm_steep" else 25.0, 1440.0
                 elif re.search(r"\b(vinegar|sour wine|acid|acetic)\b", low):
-                    prep = "infusion"
+                    prep = "cold_maceration" if re.search(r"\bmacerat\w*\b", low) else "infusion"
                     solvent = "vinegar_acidic"
                     thermal = "cold_ambient"
                     route = "oral"
-                    ph, temp_c, dur_min = 3.0, 20.0, 1440.0
+                    ph, temp_c, dur_min = 3.0, 25.0, 60.0 if prep == "cold_maceration" else 1440.0
                 elif re.search(r"\b(alcohol|spirit|tincture|wine|brandy)\b", low):
                     prep = "tincture_alcohol"
                     solvent = "hydroalcoholic"
@@ -504,10 +551,10 @@ def extract_offline_from_text(
                 # C. Historical Indication Extraction
                 # 1. Leading prepositional clauses at beginning of unit or sentence
                 ind_match = re.search(
-                    r"(?:^|[.?!;]\s+)(?:(?:Conversely|Alternatively|Moreover|Also|Furthermore|In contrast),\s*)?"
+                    r"(?:^|[.?!;]\s+)(?:(?:Conversely|Alternatively|Moreover|Also|Furthermore|In contrast),?\s*)?"
                     r"(?:For|When treating|In treating|To treat|To remedy|To cure|To soothe|To quell|To combat|To break|To relieve|To arrest)\s+"
                     r"([a-zA-Z\s,\-]+?)"
-                    r"(?=,\s*(?:the\s+)?(?:fresh|dried|finely|powdered|macerated|chopped|pounded|crushed|leaves|roots|bark|flowers|seeds|aerial|green|capsules|latex|herb|parts|plant|rhizomes)|\s+(?:is|are|was|were)\s+|[.;]|$)",
+                    r"(?=,\s*(?:(?:the\s+)?(?:fresh|dried|finely|powdered|macerated|chopped|pounded|crushed|leaves|roots|bark|flowers|seeds|aerial|green|capsules|latex|herb|parts|plant|rhizomes)|highland\s+practitioners|instead)\b|\s+(?:is|are|was|were)\s+|[.;]|$)",
                     unit,
                     re.IGNORECASE,
                 )
@@ -791,7 +838,9 @@ def build_atlas_dataset(
                     tox_alerts.extend(c.toxicity_alerts)
                     total_toxic_count += len(c.toxicity_alerts)
 
-            # Score candidates: rank candidate compounds with S_ext >= 0.45 by S_ext * (1.0 + align_score)
+            # First exclude compounds that are implausibly extracted in this
+            # preparation. Among the remaining candidates, prioritize direct
+            # indication alignment, using extraction plausibility as tie-break.
             scored_candidates = []
             for c in compounds:
                 s_ext = c.extraction_plausibility_score
@@ -800,21 +849,16 @@ def build_atlas_dataset(
                     c_targets = c.known_targets
 
                 c_align = score_mechanistic_alignment(c_targets, rec.verbatim_indication) if c_targets else c.mechanistic_alignment_score
-                if s_ext >= 0.45:
-                    combined_rank = s_ext * (1.0 + c_align)
-                else:
-                    combined_rank = s_ext
-
                 scored_candidates.append({
                     "compound": c,
                     "targets": c_targets,
                     "align_score": c_align,
-                    "combined_rank": combined_rank,
                     "s_ext": s_ext,
                 })
 
-            scored_candidates.sort(key=lambda item: (item["combined_rank"], item["s_ext"]), reverse=True)
-            best_cand = scored_candidates[0]
+            plausible_candidates = [item for item in scored_candidates if item["s_ext"] >= 0.45]
+            ranking_pool = plausible_candidates or scored_candidates
+            best_cand = max(ranking_pool, key=lambda item: (item["align_score"], item["s_ext"]))
             best_c = best_cand["compound"]
             top_compound_name = best_c.compound_name
             top_plausibility = best_c.extraction_plausibility_score
@@ -822,7 +866,10 @@ def build_atlas_dataset(
             best_align = best_cand["align_score"]
 
             if best_targets:
-                t0 = best_targets[0]
+                t0 = max(
+                    best_targets,
+                    key=lambda target: score_mechanistic_alignment([target], rec.verbatim_indication),
+                )
                 top_target_gene = t0.gene_symbol or t0.target_name
                 top_pathway = t0.therapeutic_pathway or "Cellular target modulation"
                 if validate_mechanistic_path(best_c.extraction_plausibility_score, best_align):

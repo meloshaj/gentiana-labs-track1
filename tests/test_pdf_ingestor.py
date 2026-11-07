@@ -75,7 +75,7 @@ def test_extract_text_chunks_from_text_synthetic_pages():
 def test_four_page_sharr_corpus_preserves_narrative_and_skips_summary_table():
     """Regression coverage for the four-page Sharr Mountains archival layout."""
     corpus = """=== Page 1 ===
-Gentiana lutea roots are administered orally 20 minutes before meals to remedy stomach weakness, chronic dyspepsia, sluggish digestion, and complete loss of appetite.
+Gentiana lutea roots are boiled in water and administered orally 20 minutes before meals to remedy stomach weakness, chronic dyspepsia, sluggish digestion, and complete loss of appetite.
 Hypericum perforatum flowering tops are packed into olive oil to treat severe cutaneous burns, deep abrasions, lacerations, and purulent skin wound infections.
 The dried leaves and flowers are steeped as a warm aqueous infusion in freshly boiled water at 80°C to soothe internal melancholia, nervous anxiety, mild depression, and restlessness with insomnia. Practitioners never administer the olive oil maceration orally.
 
@@ -105,8 +105,21 @@ Papaver somniferum | postoperative pain | 25C | capsule | tincture & hydroalcoho
     assert any("restlessness with insomnia" in record.verbatim_indication for record in records)
     assert any("ague tremors" in record.verbatim_indication for record in records)
     assert any("exhausting irritable coughs" in record.verbatim_indication for record in records)
+    cinchona = next(record for record in records if record.verbatim_plant_name == "Cinchona pubescens")
+    assert cinchona.plant_part == "bark"
+    assert cinchona.preparation_type == "cold_maceration"
+    assert cinchona.solvent_class == "vinegar_acidic"
     tea = next(record for record in records if record.verbatim_plant_name == "Hypericum perforatum" and record.preparation_type == "infusion")
     assert (tea.plant_part, tea.solvent_class, tea.thermal_regime) == ("leaf", "water", "warm_steep")
+
+    atlas = build_atlas_dataset(batch)["atlas_df"]
+    tea_row = atlas[(atlas["Plant Name"] == "Hypericum perforatum") & (atlas["Preparation"] == "Infusion")].iloc[0]
+    papaver_row = atlas[atlas["Plant Name"] == "Papaver somniferum"].iloc[0]
+    assert tea_row["Top Target (Gene)"] in {"MAOA", "SLC6A4"}
+    assert tea_row["Mechanistic Status"] == "⭐ Validated Path"
+    assert papaver_row["Primary Bioactive"] == "Morphine"
+    assert papaver_row["Top Target (Gene)"] == "OPRM1"
+    assert papaver_row["Mechanistic Status"] == "⭐ Validated Path"
 
 
 def test_extract_offline_from_text():
