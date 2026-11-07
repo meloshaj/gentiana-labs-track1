@@ -1206,10 +1206,13 @@ def render_mining_view(cfg: Dict[str, Any]) -> None:
                 "mw_max": float(all_df["MW"].max()),
             }
         cols_scat = st.columns(len(analyses))
-        for c, a, df in zip(cols_scat, analyses, frames):
+        for idx, (c, a, df) in enumerate(zip(cols_scat, analyses, frames)):
             with c:
-                st.plotly_chart(scatter(df, f"Chemical Space: {prep_label(a['record'])}", ranges), width="stretch",
-                                key=f"scatter_{a['record']['preparation_type']}_{a['record']['solvent_class']}_{a['record']['thermal_regime']}")
+                st.plotly_chart(
+                    scatter(df, f"Chemical Space: {prep_label(a['record'])}", ranges),
+                    width="stretch",
+                    key=f"scatter_{idx}_{a['record'].get('verbatim_plant_name', 'plant')}_{a['record'].get('preparation_type', '')}_{a['record'].get('solvent_class', '')}_{a['record'].get('thermal_regime', '')}",
+                )
 
 
 def render_table(analyses: List[Dict[str, Any]], frames: List[pd.DataFrame]) -> None:
