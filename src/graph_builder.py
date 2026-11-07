@@ -422,7 +422,7 @@ class DecoctionGraphBuilder:
         """
         target_graph = subgraph if subgraph is not None else self.graph
 
-        net = Network(height="850px", width="100%", directed=True, notebook=False)
+        net = Network(height="850px", width="100%", directed=True, notebook=False, bgcolor="#0d1512")
         net.barnes_hut(gravity=-3000, central_gravity=0.3, spring_length=120)
 
         # 1. Add Nodes with Custom Styling & Rich Tooltips
@@ -434,6 +434,13 @@ class DecoctionGraphBuilder:
                 color = COLOR_PLANT
                 size = 28
                 shape = "dot"
+                font = {
+                    "color": "#FFFFFF",
+                    "size": 14,
+                    "strokeWidth": 2.5,
+                    "strokeColor": "#08100d",
+                    "face": "Inter, system-ui, sans-serif",
+                }
                 title = (
                     f"<b>Botanical Taxon</b><br>"
                     f"Scientific Name: {attrs.get('scientific_name')}<br>"
@@ -447,6 +454,13 @@ class DecoctionGraphBuilder:
                 color = COLOR_PREPARATION
                 size = 24
                 shape = "diamond"
+                font = {
+                    "color": "#FFFFFF",
+                    "size": 13,
+                    "strokeWidth": 2.5,
+                    "strokeColor": "#08100d",
+                    "face": "Inter, system-ui, sans-serif",
+                }
                 title = (
                     f"<b>Ethnobotanical Preparation</b><br>"
                     f"Type: {attrs.get('prep_type')}<br>"
@@ -461,6 +475,13 @@ class DecoctionGraphBuilder:
                 color = COLOR_INDICATION
                 size = 22
                 shape = "star"
+                font = {
+                    "color": "#FFFFFF",
+                    "size": 13,
+                    "strokeWidth": 2.5,
+                    "strokeColor": "#08100d",
+                    "face": "Inter, system-ui, sans-serif",
+                }
                 title = (
                     f"<b>Medical Indication</b><br>"
                     f"Ailment: {attrs.get('verbatim_indication')}<br>"
@@ -483,14 +504,35 @@ class DecoctionGraphBuilder:
                     color = COLOR_COMPOUND_TOXIN
                     size = 18
                     shape = "triangle"
+                    font = {
+                        "color": "#FF6B6B",
+                        "size": 12,
+                        "strokeWidth": 2.5,
+                        "strokeColor": "#08100d",
+                        "face": "Inter, system-ui, sans-serif",
+                    }
                 elif max_score >= min_plausibility:
                     color = COLOR_COMPOUND_PLAUSIBLE
                     size = 16
                     shape = "dot"
+                    font = {
+                        "color": "#FFFFFF",
+                        "size": 12,
+                        "strokeWidth": 2.5,
+                        "strokeColor": "#08100d",
+                        "face": "Inter, system-ui, sans-serif",
+                    }
                 else:
                     color = COLOR_COMPOUND_EXCLUDED
                     size = 12
                     shape = "dot"
+                    font = {
+                        "color": "#94A3B8",
+                        "size": 11,
+                        "strokeWidth": 2,
+                        "strokeColor": "#08100d",
+                        "face": "Inter, system-ui, sans-serif",
+                    }
 
                 alerts_text = f"<span style='color:red;'>ALERTS: {', '.join(alerts)}</span><br>" if is_toxic else ""
                 title = (
@@ -507,6 +549,13 @@ class DecoctionGraphBuilder:
                 color = COLOR_TARGET
                 size = 20
                 shape = "hexagon"
+                font = {
+                    "color": "#FFFFFF",
+                    "size": 13,
+                    "strokeWidth": 2.5,
+                    "strokeColor": "#08100d",
+                    "face": "Inter, system-ui, sans-serif",
+                }
                 potency = attrs.get("bioactivity_potency_um")
                 pot_str = f"{potency} µM" if potency is not None else "N/A"
                 title = (
@@ -523,6 +572,13 @@ class DecoctionGraphBuilder:
                 color = "#9E9E9E"
                 size = 15
                 shape = "dot"
+                font = {
+                    "color": "#FFFFFF",
+                    "size": 12,
+                    "strokeWidth": 2,
+                    "strokeColor": "#08100d",
+                    "face": "Inter, system-ui, sans-serif",
+                }
                 title = str(node_id)
 
             net.add_node(
@@ -532,9 +588,18 @@ class DecoctionGraphBuilder:
                 color=color,
                 size=size,
                 shape=shape,
+                font=font,
             )
 
         # 2. Add Edges with Styling & Labels
+        edge_font = {
+            "color": "#FFFFFF",
+            "size": 11,
+            "strokeWidth": 3,
+            "strokeColor": "#08100d",
+            "align": "horizontal",
+        }
+
         for u, v, key, edge_data in target_graph.edges(keys=True, data=True):
             e_type = edge_data.get("edge_type", "")
             is_val = bool(edge_data.get("is_validated_path", False))
@@ -548,6 +613,7 @@ class DecoctionGraphBuilder:
                     label="HAS_PREPARATION",
                     color=COLOR_PREPARATION,
                     arrows="to",
+                    font=edge_font,
                 )
             elif e_type == "TREATS":
                 net.add_edge(
@@ -557,6 +623,7 @@ class DecoctionGraphBuilder:
                     label=f"TREATS ({edge_data.get('route')})",
                     color=COLOR_INDICATION,
                     arrows="to",
+                    font=edge_font,
                 )
             elif e_type == "SOLUBILIZES":
                 score = edge_data.get("plausibility_score", 0.0)
@@ -579,6 +646,7 @@ class DecoctionGraphBuilder:
                     color=edge_color,
                     width=width,
                     arrows="to",
+                    font=edge_font,
                 )
             elif e_type == "MODULATES":
                 edge_color = COLOR_VALIDATED_PATH if is_val else COLOR_TARGET
@@ -594,6 +662,7 @@ class DecoctionGraphBuilder:
                     color=edge_color,
                     width=width,
                     arrows="to",
+                    font=edge_font,
                 )
             elif e_type == "EXPLAINS_EFFICACY_IN":
                 edge_color = COLOR_VALIDATED_PATH if is_val else "#F59E0B"
@@ -608,9 +677,10 @@ class DecoctionGraphBuilder:
                     color=edge_color,
                     width=width,
                     arrows="to",
+                    font=edge_font,
                 )
             else:
-                net.add_edge(u, v, arrows="to")
+                net.add_edge(u, v, arrows="to", font=edge_font)
 
         # 3. Output HTML
         out_path = Path(output_html_path)
