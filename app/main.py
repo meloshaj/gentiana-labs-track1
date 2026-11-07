@@ -2008,11 +2008,11 @@ def render_batch_corpus_miner() -> None:
             key="corpus_region_input",
         )
     with c3:
-        has_key = bool(os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY"))
         offline_toggle = st.toggle(
             "Fast Offline Demo Mode",
-            value=(not has_key),
-            help="Enables rapid deterministic rule-based extraction for instant evaluation without LLM API quotas.",
+            value=True,
+            key="corpus_offline_mode_v2",
+            help="On by default to avoid API usage. Turn this off to opt in to live LLM extraction when a provider key is configured.",
         )
 
     btn_mine = st.button("🚀 Ingest Document & Synthesize Ethnopharmacology Atlas", type="primary", key="btn_run_mining")
