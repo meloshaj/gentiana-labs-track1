@@ -297,6 +297,10 @@ def compute_organ_factor(
     if part in ("root", "rhizome") and any(o in ("root", "rhizome") for o in organs):
         return 1.0
 
+    # Resin, fruit, and exudate relationship (e.g. poppy capsule latex)
+    if part in ("resin", "fruit") and any(o in ("resin", "fruit", "exudate_latex", "seed_capsule") for o in organs):
+        return 1.0
+
     # Disjoint organ restriction
     return 0.08
 
@@ -494,7 +498,10 @@ def calculate_extraction_plausibility(
         logd = float(descriptors.get("logd_at_recipe_ph", clogp))
 
     # 3. Solvent partitioning desirability S_solvent(logD, TPSA, solvent)
-    if solvent == "water":
+    if preparation_type in ("juice_wringing", "raw"):
+        # Direct mechanical expression: cellular trichomes ruptured, no passive solvent filtering
+        s_solvent = 1.0
+    elif solvent == "water":
         # Favors -2.5 <= logD <= 2.0 and TPSA >= 60.0. Penalizes logD > 3.0 heavily.
         s_logd = _sigmoid_range_desirability(logd, low=-2.5, high=2.0, k_low=0.8, k_high=3.0)
         s_tpsa = _sigmoid_min_desirability(tpsa, min_val=60.0, k=0.03)
@@ -800,6 +807,7 @@ def create_phytochemical_record(
     documented_organs: Optional[List[str]] = None,
     known_targets: Optional[List[TargetMechanismRecord]] = None,
     mechanistic_alignment_score: float = 0.0,
+    preparation_type: str = "decoction",
 ) -> Optional[PhytochemicalRecord]:
     """Calculate descriptors, score physical chemistry extraction plausibility, and assemble PhytochemicalRecord.
 
@@ -868,7 +876,12 @@ def create_phytochemical_record(
         except Exception:
             pass
         surv_fraction, half_life_100c, is_thermolabile = compute_arrhenius_survival(
-            mol=mol, temp_c=temp_c, duration_min=dur_min, mw=desc["mw"], tpsa=desc["tpsa"]
+            mol=mol,
+            temp_c=temp_c,
+            duration_min=dur_min,
+            preparation_type=preparation_type,
+            mw=desc["mw"],
+            tpsa=desc["tpsa"],
         )
     else:
         surv_fraction, half_life_100c, is_thermolabile = 1.0, None, desc["is_thermolabile"]
@@ -884,6 +897,7 @@ def create_phytochemical_record(
         temperature_celsius=temp_c,
         prepared_part=prepared_part,
         documented_organs=organs,
+        preparation_type=preparation_type,
     )
     verdict = map_plausibility_to_verdict(score)
 

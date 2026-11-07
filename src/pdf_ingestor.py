@@ -41,8 +41,117 @@ logger = logging.getLogger(__name__)
 
 
 # ==============================================================================
-# PDF & Text Chunking with Page Number Provenance
+# PDF & Text Chunking with Page Number Provenance & Table Filtering
 # ==============================================================================
+
+def _is_summary_or_table_block(block: str) -> bool:
+    """Check if a text block/section is a reference or summary table to skip."""
+    b_low = block.lower().strip()
+    if not b_low:
+        return False
+
+    summary_indicators = [
+        "summary matrix",
+        "expected decoctiongraph pipeline outputs",
+        "expected pipeline outputs",
+        "summary table",
+        "summary of outputs",
+        "pipeline output matrix",
+    ]
+    if any(ind in b_low for ind in summary_indicators):
+        return True
+
+    # Check for markdown table format (| col1 | col2 | or | --- |)
+    lines = [l.strip() for l in block.splitlines() if l.strip()]
+    if len(lines) >= 2:
+        pipe_lines = [l for l in lines if l.count("|") >= 2]
+        if pipe_lines and (
+            len(pipe_lines) / len(lines) >= 0.4
+            or any(re.match(r"^\|?[\s\-:]+\|[\s\-:|]+$", l) for l in lines)
+        ):
+            return True
+
+    return False
+
+
+def _split_into_sections_or_paragraphs(text: str) -> List[str]:
+    """Split text along section markers (e.g. 1.1, 1.2), plant taxa transitions, or paragraphs."""
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n").strip()
+    if not normalized:
+        return []
+
+    split_pattern = (
+        r"(?:\n\s*\n+|"
+        r"(?<=\n)(?=(?:(?:[0-9]+\.[0-9]+|[0-9]+\.)\s+|[#]{1,4}\s+|Section\s+\d+|Chapter\s+\d+))|"
+        r"(?<=\n)(?=(?:Gentiana\s+lutea|Hypericum\s+perforatum|Artemisia\s+annua|Cinchona\s+pubescens|Symphytum\s+officinale|Papaver\s+somniferum)\b))"
+    )
+    raw_blocks = re.split(split_pattern, normalized, flags=re.IGNORECASE)
+    blocks = [b.strip() for b in raw_blocks if b.strip()]
+    return blocks if blocks else [normalized]
+
+
+def _pack_blocks_into_chunks(
+    blocks: List[str],
+    page_number: int,
+    chunk_size: int = 1800,
+    overlap: int = 250,
+) -> List[Dict[str, Any]]:
+    """Greedily pack paragraph/section blocks into chunks up to chunk_size without splitting across blocks."""
+    valid_blocks = [b for b in blocks if not _is_summary_or_table_block(b)]
+    if not valid_blocks:
+        return []
+
+    final_blocks: List[str] = []
+    for b in valid_blocks:
+        if len(b) <= chunk_size:
+            final_blocks.append(b)
+        else:
+            sentences = re.split(r"(?<=[.!?])\s+", b)
+            cur_s: List[str] = []
+            cur_s_len = 0
+            for s in sentences:
+                s_strip = s.strip()
+                if not s_strip:
+                    continue
+                if cur_s_len + len(s_strip) + 1 > chunk_size and cur_s:
+                    final_blocks.append(" ".join(cur_s))
+                    cur_s = [s_strip]
+                    cur_s_len = len(s_strip)
+                else:
+                    cur_s.append(s_strip)
+                    cur_s_len += len(s_strip) + 1
+            if cur_s:
+                final_blocks.append(" ".join(cur_s))
+
+    chunks: List[Dict[str, Any]] = []
+    c_idx = 1
+    current_acc: List[str] = []
+    current_len = 0
+
+    for b in final_blocks:
+        b_len = len(b)
+        if current_len + b_len + (2 if current_acc else 0) > chunk_size and current_acc:
+            chunks.append({
+                "page_number": page_number,
+                "chunk_id": f"p{page_number}_c{c_idx}",
+                "text": "\n\n".join(current_acc),
+            })
+            c_idx += 1
+            current_acc = [b]
+            current_len = b_len
+        else:
+            current_acc.append(b)
+            current_len += b_len + (2 if len(current_acc) > 1 else 0)
+
+    if current_acc:
+        chunks.append({
+            "page_number": page_number,
+            "chunk_id": f"p{page_number}_c{c_idx}",
+            "text": "\n\n".join(current_acc),
+        })
+
+    return chunks
+
 
 def extract_text_chunks_from_pdf(
     pdf_bytes: bytes,
@@ -50,6 +159,8 @@ def extract_text_chunks_from_pdf(
     overlap: int = 250,
 ) -> List[Dict[str, Any]]:
     """Parse PDF pages using pypdf and split text into chunks preserving page metadata.
+
+    Filters out reference/summary tables and splits along section and paragraph boundaries.
 
     Args:
         pdf_bytes: Raw binary bytes of the PDF file.
@@ -71,33 +182,12 @@ def extract_text_chunks_from_pdf(
             page_text = ""
 
         cleaned = re.sub(r"[ \t]+", " ", page_text).strip()
-        if not cleaned:
+        if not cleaned or _is_summary_or_table_block(cleaned):
             continue
 
-        if len(cleaned) <= chunk_size:
-            chunks.append({
-                "page_number": page_idx,
-                "chunk_id": f"p{page_idx}_c1",
-                "text": cleaned,
-            })
-        else:
-            # Sliding window over long page text
-            start = 0
-            c_idx = 1
-            step = max(chunk_size - overlap, 200)
-            while start < len(cleaned):
-                end = min(start + chunk_size, len(cleaned))
-                chunk_slice = cleaned[start:end].strip()
-                if chunk_slice:
-                    chunks.append({
-                        "page_number": page_idx,
-                        "chunk_id": f"p{page_idx}_c{c_idx}",
-                        "text": chunk_slice,
-                    })
-                    c_idx += 1
-                if end >= len(cleaned):
-                    break
-                start += step
+        blocks = _split_into_sections_or_paragraphs(cleaned)
+        page_chunks = _pack_blocks_into_chunks(blocks, page_number=page_idx, chunk_size=chunk_size, overlap=overlap)
+        chunks.extend(page_chunks)
 
     return chunks
 
@@ -110,6 +200,7 @@ def extract_text_chunks_from_text(
     """Split raw text into chunks, honoring explicit page breaks or synthetic pages.
 
     Supports page dividers like `=== Page 1 ===`, `--- Page 2 ---`, or `\\f`.
+    Skips summary/reference tables.
 
     Args:
         raw_text: Plain text content.
@@ -134,32 +225,12 @@ def extract_text_chunks_from_text(
             start_pos = m.end()
             end_pos = matches[i + 1].start() if i + 1 < len(matches) else len(clean_text)
             page_body = clean_text[start_pos:end_pos].strip()
-            if not page_body:
+            if not page_body or _is_summary_or_table_block(page_body):
                 continue
 
-            if len(page_body) <= chunk_size:
-                chunks.append({
-                    "page_number": page_num,
-                    "chunk_id": f"p{page_num}_c1",
-                    "text": page_body,
-                })
-            else:
-                start = 0
-                c_idx = 1
-                step = max(chunk_size - overlap, 200)
-                while start < len(page_body):
-                    end = min(start + chunk_size, len(page_body))
-                    chunk_slice = page_body[start:end].strip()
-                    if chunk_slice:
-                        chunks.append({
-                            "page_number": page_num,
-                            "chunk_id": f"p{page_num}_c{c_idx}",
-                            "text": chunk_slice,
-                        })
-                        c_idx += 1
-                    if end >= len(page_body):
-                        break
-                    start += step
+            blocks = _split_into_sections_or_paragraphs(page_body)
+            page_chunks = _pack_blocks_into_chunks(blocks, page_number=page_num, chunk_size=chunk_size, overlap=overlap)
+            chunks.extend(page_chunks)
         return chunks
 
     # Check for form-feed characters \f
@@ -168,34 +239,36 @@ def extract_text_chunks_from_text(
         chunks = []
         for p_idx, p_text in enumerate(pages, start=1):
             p_clean = p_text.strip()
-            if p_clean:
-                chunks.append({
-                    "page_number": p_idx,
-                    "chunk_id": f"p{p_idx}_c1",
-                    "text": p_clean,
-                })
+            if p_clean and not _is_summary_or_table_block(p_clean):
+                blocks = _split_into_sections_or_paragraphs(p_clean)
+                p_chunks = _pack_blocks_into_chunks(blocks, page_number=p_idx, chunk_size=chunk_size, overlap=overlap)
+                chunks.extend(p_chunks)
         return chunks
 
     # Fallback: synthetic pagination by paragraph chunks
-    paragraphs = [p.strip() for p in clean_text.split("\n\n") if p.strip()]
+    blocks = _split_into_sections_or_paragraphs(clean_text)
+    valid_blocks = [b for b in blocks if not _is_summary_or_table_block(b)]
+    if not valid_blocks:
+        return []
+
     chunks = []
     current_page = 1
     current_acc: List[str] = []
     current_len = 0
 
-    for p in paragraphs:
-        if current_len + len(p) > chunk_size and current_acc:
+    for b in valid_blocks:
+        if current_len + len(b) > chunk_size and current_acc:
             chunks.append({
                 "page_number": current_page,
                 "chunk_id": f"p{current_page}_c1",
                 "text": "\n\n".join(current_acc),
             })
             current_page += 1
-            current_acc = [p]
-            current_len = len(p)
+            current_acc = [b]
+            current_len = len(b)
         else:
-            current_acc.append(p)
-            current_len += len(p)
+            current_acc.append(b)
+            current_len += len(b)
 
     if current_acc:
         chunks.append({
@@ -232,8 +305,9 @@ def extract_offline_from_text(
     """Extract structured ethnobotanical records deterministically without an LLM.
 
     Enables instant offline evaluation of multi-page corpus uploads for judges
-    and offline development environments. Scans for known taxa and extracts atomic
-    preparation filters, anatomical organs, and historical indications.
+    and offline development environments. Scans for known taxa, isolates preparations
+    strictly to their own sentence/paragraph scopes to prevent attribute bleeding,
+    strips cautionary clauses, and extracts clean indications.
 
     Args:
         passage: Text passage or chunk.
@@ -243,154 +317,227 @@ def extract_offline_from_text(
     Returns:
         List of validated EthnoPreparationRecord instances.
     """
-    records: List[EthnoPreparationRecord] = []
     clean = passage.strip()
-    if not clean:
+    if not clean or _is_summary_or_table_block(clean):
         return []
 
-    # Segment into paragraphs and sub-blocks
-    paragraphs = [p.strip() for p in clean.split("\n\n") if len(p.strip()) > 15]
-    if not paragraphs:
-        paragraphs = [p.strip() for p in clean.split("\n") if len(p.strip()) > 15]
-    if not paragraphs:
-        paragraphs = [clean]
+    records: List[EthnoPreparationRecord] = []
 
-    for paragraph in paragraphs:
-        # Check if paragraph contains contrastive clauses with multiple preparations
-        sub_blocks = re.split(r"\b(?:Conversely|In later centuries|On the other hand|Alternatively)\b", paragraph, flags=re.IGNORECASE)
-        last_matched_taxon: Optional[str] = None
+    # Segment into paragraphs and section sub-blocks
+    blocks = _split_into_sections_or_paragraphs(clean)
 
-        for sub_idx, raw_unit in enumerate(sub_blocks):
-            unit = raw_unit.strip()
-            if not unit:
-                continue
-            low = unit.lower()
-            matched_taxon: Optional[str] = None
-            for key, canonical in _OFFLINE_TAXA:
-                if re.search(r"\b" + re.escape(key) + r"\b", low):
-                    matched_taxon = canonical
-                    break
+    for block in blocks:
+        if _is_summary_or_table_block(block):
+            continue
 
-            if not matched_taxon:
-                # Inherit from first clause in the same paragraph if it described the same plant
-                if last_matched_taxon:
-                    matched_taxon = last_matched_taxon
-                else:
-                    continue
-            else:
-                last_matched_taxon = matched_taxon
+        # 1. Identify all taxa present in this block with their start positions
+        taxa_matches: List[Tuple[int, int, str]] = []
+        for key, canonical in _OFFLINE_TAXA:
+            for m in re.finditer(r"\b" + re.escape(key) + r"\b", block, flags=re.IGNORECASE):
+                taxa_matches.append((m.start(), m.end(), canonical))
 
-            # 1. Plant Part
-            if re.search(r"\b(root|roots|rhizome)\b", low):
-                part: PlantPart = "root"
-            elif re.search(r"\b(bark)\b", low):
-                part = "bark"
-            elif re.search(r"\b(leaf|leaves|folia)\b", low):
-                part = "leaf"
-            elif re.search(r"\b(flower|flowers|flowering tops|buds)\b", low):
-                part = "flower"
-            elif re.search(r"\b(seed|seeds)\b", low):
-                part = "seed"
-            elif re.search(r"\b(capsule|latex|head|heads|fruit)\b", low):
-                part = "fruit"
-            elif re.search(r"\b(aerial parts|herb|green herb)\b", low):
-                part = "aerial_parts"
-            else:
-                part = "whole_plant"
+        if not taxa_matches:
+            continue
 
-            # 2. Preparation Type, Solvent Class, Thermal Regime
-            if re.search(r"\b(poultice|compress|paste|bound over)\b", low):
-                prep: PreparationType = "poultice"
-                solvent: SolventClass = "none"
-                thermal: ThermalRegime = "none"
-                route: AdministrationRoute = "topical"
-                ph, temp_c, dur_min = 7.0, 20.0, 30.0
-            elif re.search(r"\b(juice|wring|wrung|pressed)\b", low):
-                prep = "juice_wringing"
-                solvent = "water"
-                thermal = "cold_ambient"
-                route = "oral"
-                ph, temp_c, dur_min = 7.0, 20.0, 15.0
-            elif re.search(r"\b(oil maceration|olive oil|in oil|oil)\b", low):
-                prep = "oil_maceration"
-                solvent = "lipid_oil"
-                thermal = "warm_steep" if re.search(r"\b(sun|sunlight|warm|days)\b", low) else "cold_ambient"
-                route = "topical"
-                ph, temp_c, dur_min = 7.0, 60.0 if thermal == "warm_steep" else 25.0, 1440.0
-            elif re.search(r"\b(vinegar|sour wine|acid)\b", low):
-                prep = "infusion"
-                solvent = "vinegar_acidic"
-                thermal = "cold_ambient"
-                route = "oral"
-                ph, temp_c, dur_min = 3.0, 20.0, 1440.0
-            elif re.search(r"\b(alcohol|spirit|tincture|wine)\b", low):
-                prep = "tincture_alcohol"
-                solvent = "hydroalcoholic"
-                thermal = "warm_steep" if "warm wine" in low else "cold_ambient"
-                route = "oral"
-                ph, temp_c, dur_min = 6.5, 60.0 if "warm wine" in low else 25.0, 60.0
-            elif re.search(r"\b(boil|simmer|decoct|decoction|draught|porridge)\b", low):
-                prep = "decoction"
-                solvent = "water"
-                thermal = "boiling_prolonged"
-                route = "oral"
-                ph, temp_c, dur_min = 7.0, 100.0, 45.0
-            else:
-                prep = "infusion"
-                solvent = "water"
-                thermal = "warm_steep"
-                route = "topical" if re.search(r"\b(wound|burn|skin|abrasion|laceration|topical)\b", low) else "oral"
-                ph, temp_c, dur_min = 7.0, 80.0, 30.0
+        taxa_matches.sort(key=lambda x: x[0])
 
-            # Administration route override
-            if re.search(r"\b(topical|applied topically|bound over|external|lotion)\b", low):
-                route = "topical"
-            elif re.search(r"\b(oral|drunk|drink|draught|taken|before meals|swallowed)\b", low):
-                route = "oral"
+        # Filter to distinct plant transitions so consecutive mentions of same plant don't fragment
+        distinct_transitions: List[Tuple[int, str]] = []
+        last_t: Optional[str] = None
+        for s, e, c in taxa_matches:
+            if c != last_t:
+                distinct_transitions.append((s, c))
+                last_t = c
 
-            # 3. Indication clause extraction (prioritize curative phrases over temporal 'for X hours')
-            ind_match = re.search(
-                r"(?:to cure|to soothe|to treat|against|to break|to quell|virtue for|relieve|cure)\s+([a-zA-Z\s,]+?)(?=[.;]|\band taken|\byielding|\band applied|$)",
-                unit,
-                re.IGNORECASE,
+        # 2. Partition block strictly by plant taxon scope
+        plant_segments: List[Tuple[str, str]] = []
+        for i, (start_idx, taxon) in enumerate(distinct_transitions):
+            end_idx = distinct_transitions[i + 1][0] if i + 1 < len(distinct_transitions) else len(block)
+            seg_text = block[start_idx:end_idx].strip()
+            if seg_text:
+                plant_segments.append((taxon, seg_text))
+
+        # 3. Process each plant's isolated scope
+        for matched_taxon, seg_text in plant_segments:
+            sub_units = re.split(
+                r"\b(?:Conversely|In later centuries|On the other hand|Alternatively|In contrast)\b",
+                seg_text,
+                flags=re.IGNORECASE,
             )
-            if not ind_match:
-                # Fallback to 'for ...', filtering out temporal duration phrases
+
+            for raw_unit in sub_units:
+                unit = raw_unit.strip()
+                if len(unit) < 15:
+                    continue
+
+                # Separate recipe instructions from cautionary medical warnings
+                caution_split = re.split(
+                    r"\b(?:though\s+(?:physicians|doctors|healers|caution)|caution\s+against|warning|toxic\s+principles|beware\s+of)\b",
+                    unit,
+                    flags=re.IGNORECASE,
+                )
+                recipe_text = caution_split[0].strip()
+                caution_text = caution_split[1].strip() if len(caution_split) > 1 else ""
+                low = recipe_text.lower()
+
+                # A. Plant Part (scoped strictly to recipe clause)
+                if re.search(r"\b(latex|sap|resin|gum)\b", low):
+                    part: PlantPart = "fruit"  # maps to fruit/exudate in LOTUS
+                elif re.search(r"\b(capsule|capsules|head|heads|fruit|fruits|berry|berries)\b", low):
+                    part = "fruit"
+                elif re.search(r"\b(seed|seeds)\b", low):
+                    part = "seed"
+                elif re.search(r"\b(root|roots|rhizome|rhizomes)\b", low):
+                    part = "root"
+                elif re.search(r"\b(bark)\b", low):
+                    part = "bark"
+                elif re.search(r"\b(leaf|leaves|folia)\b", low):
+                    part = "leaf"
+                elif re.search(r"\b(flower|flowers|flowering tops|buds)\b", low):
+                    part = "flower"
+                elif re.search(r"\b(aerial parts|aerial|herb|green herb)\b", low):
+                    part = "aerial_parts"
+                else:
+                    part = "whole_plant"
+
+                # B. Preparation Type, Solvent Class, Thermal Regime
+                if re.search(r"\b(poultice|compress|paste|bound over|plaster)\b", low):
+                    prep: PreparationType = "poultice"
+                    solvent: SolventClass = "none"
+                    thermal: ThermalRegime = "none"
+                    route: AdministrationRoute = "topical"
+                    ph, temp_c, dur_min = 7.0, 25.0, 30.0
+                elif re.search(r"\b(juice|wring|wrung|pressed|expressed)\b", low):
+                    prep = "juice_wringing"
+                    solvent = "water"
+                    thermal = "cold_ambient"
+                    route = "oral"
+                    ph, temp_c, dur_min = 7.0, 20.0, 15.0
+                elif re.search(r"\b(oil maceration|olive oil|in oil|oil)\b", low) and not re.search(r"\bessential oil\b", low):
+                    prep = "oil_maceration"
+                    solvent = "lipid_oil"
+                    thermal = "warm_steep" if re.search(r"\b(sun|sunlight|warm|days)\b", low) else "cold_ambient"
+                    route = "topical"
+                    ph, temp_c, dur_min = 7.0, 60.0 if thermal == "warm_steep" else 25.0, 1440.0
+                elif re.search(r"\b(vinegar|sour wine|acid|acetic)\b", low):
+                    prep = "infusion"
+                    solvent = "vinegar_acidic"
+                    thermal = "cold_ambient"
+                    route = "oral"
+                    ph, temp_c, dur_min = 3.0, 20.0, 1440.0
+                elif re.search(r"\b(alcohol|spirit|tincture|wine|brandy)\b", low):
+                    prep = "tincture_alcohol"
+                    solvent = "hydroalcoholic"
+                    thermal = "warm_steep" if re.search(r"\b(warm wine|warm spirit|heated wine)\b", low) else "cold_ambient"
+                    route = "oral"
+                    ph, temp_c, dur_min = 6.5, 60.0 if "warm" in low else 25.0, 60.0
+                elif re.search(r"\b(boil|boiled|boiling|simmer|decoct|decoction|draught|porridge)\b", low):
+                    prep = "decoction"
+                    solvent = "water"
+                    thermal = "boiling_prolonged"
+                    route = "oral"
+                    ph, temp_c, dur_min = 7.0, 100.0, 45.0
+                elif re.search(r"\b(steep|steeped|tea|infus|infusion)\b", low):
+                    prep = "infusion"
+                    solvent = "water"
+                    thermal = "warm_steep" if re.search(r"\b(hot|warm|boiling water|hot water)\b", low) else "cold_ambient"
+                    route = "oral"
+                    ph, temp_c, dur_min = 7.0, 80.0 if thermal == "warm_steep" else 25.0, 30.0
+                else:
+                    prep = "infusion"
+                    solvent = "water"
+                    thermal = "warm_steep"
+                    route = "topical" if re.search(r"\b(wound|burn|skin|abrasion|laceration|topical)\b", low) else "oral"
+                    ph, temp_c, dur_min = 7.0, 80.0, 30.0
+
+                # Administration route override
+                if re.search(r"\b(topical|applied topically|bound over|external|lotion|salve)\b", low):
+                    route = "topical"
+                elif re.search(r"\b(oral|drunk|drink|draught|taken|before meals|swallowed)\b", low):
+                    route = "oral"
+
+                # C. Historical Indication Extraction
+                # 1. Leading prepositional clauses at beginning of unit or sentence
                 ind_match = re.search(
-                    r"\bfor\s+(?!(?:over\s+|several\s+|\d+\s*|\w+\s*(?:hour|minute|day|month|year|sec)))([a-zA-Z\s,]+?)(?=[.;]|\band taken|\byielding|\band applied|$)",
+                    r"^(?:(?:Conversely|Alternatively|Moreover|Also|Furthermore|In contrast),\s*)?"
+                    r"(?:For|To treat|To cure|To soothe|To quell|To combat|To break|To relieve|Against|In cases of)\s+"
+                    r"([a-zA-Z\s,\-]+?)"
+                    r"(?=,\s*(?:the\s+)?(?:fresh|dried|finely|powdered|macerated|chopped|pounded|crushed|leaves|roots|bark|flowers|seeds|aerial|green|capsules|latex|herb|parts|plant|rhizomes)|\s+(?:is|are|was|were)\s+|[.;]|$)",
                     unit,
                     re.IGNORECASE,
                 )
+                if not ind_match:
+                    # 2. Curative or administration action verbs inside sentence
+                    ind_match = re.search(
+                        r"(?:administered(?:\s+orally|\s+topically)?\s+to\s+(?:treat|cure|soothe|quell|relieve)|"
+                        r"to\s+(?:cure|soothe|treat|combat|quell|relieve|break)|"
+                        r"applied(?:\s+topically)?\s+to\s+(?:soothe|treat|cure|heal|quell|relieve)|"
+                        r"taken(?:\s+orally)?\s+to\s+(?:cure|soothe|treat|quell|relieve|break)|"
+                        r"used\s+(?:for|to\s+treat|to\s+cure|against)|"
+                        r"prescribed\s+(?:for|to\s+treat|against)|"
+                        r"prized\s+for|indicated\s+for|virtue\s+for|remedy\s+for|against|anodyne\s+for|"
+                        r"as\s+(?:a|an)\s+(?:potent\s+)?anodyne\s+for)\s+"
+                        r"([a-zA-Z\s,\-]+?)"
+                        r"(?=[.;]|\band taken|\band drunk|\band applied|\band administered|\byielding|\bthough\b|\bwith\b|\bafter\b|$)",
+                        unit,
+                        re.IGNORECASE,
+                    )
+                if not ind_match:
+                    # 3. Fallback to 'for ...', filtering out temporal duration phrases
+                    ind_match = re.search(
+                        r"\bfor\s+(?!(?:over\s+|several\s+|\d+\s*|\w+\s*(?:hour|minute|day|month|year|sec|times)))([a-zA-Z\s,\-]+?)"
+                        r"(?=[.;]|\band taken|\band drunk|\band applied|\band administered|\byielding|\bthough\b|$)",
+                        unit,
+                        re.IGNORECASE,
+                    )
 
-            if ind_match:
-                indication = ind_match.group(1).strip()
-                indication = re.sub(r"\s+(?:and|or|in|with)$", "", indication, flags=re.IGNORECASE).strip()
-            else:
-                indication = "Historical illness or ailment"
+                if ind_match:
+                    indication = ind_match.group(1)
+                    # Normalize embedded newlines to spaces
+                    indication = re.sub(r"\s+", " ", indication).strip()
+                    # Truncate trailing botanical subject clauses
+                    indication = re.split(
+                        r",\s*(?:the\s+)?(?:fresh|dried|finely|powdered|macerated|chopped|pounded|crushed|leaves|roots|bark|flowers|flowering|seeds|aerial|green|capsules|latex|herb|parts|plant)\b",
+                        indication,
+                        flags=re.IGNORECASE,
+                    )[0].strip()
+                    # Strip trailing conjunctions, prepositions, and verbs
+                    indication = re.sub(
+                        r"\s+(?:and|or|in|with|by|from|as|to|is|are|was|were)$",
+                        "",
+                        indication,
+                        flags=re.IGNORECASE,
+                    ).strip()
+                    indication = re.sub(r"[,;:\-]+$", "", indication).strip()
+                else:
+                    indication = "Historical illness or ailment"
 
-            quote = unit.strip()
-            # If quote starts with comma, clean it
-            quote = re.sub(r"^,\s*", "", quote)
+                quote = re.sub(r"\s+", " ", unit.strip())
+                quote = re.sub(r"^,\s*", "", quote)
 
-            records.append(
-                EthnoPreparationRecord(
-                    verbatim_plant_name=matched_taxon,
-                    plant_part=part,
-                    preparation_type=prep,
-                    solvent_class=solvent,
-                    thermal_regime=thermal,
-                    estimated_ph=ph,
-                    duration_minutes=dur_min,
-                    temperature_celsius=temp_c,
-                    verbatim_indication=indication,
-                    administration_route=route,
-                    verbatim_quote=quote,
-                    cultural_or_geographic_origin=region,
-                    extraction_confidence=0.94,
-                    ambiguity_notes=f"Extracted via offline heuristic from document chunk. Source citation: {source_citation}",
-                    source_citation=source_citation,
+                ambiguity = f"Extracted via offline heuristic from document chunk. Source citation: {source_citation}"
+                if caution_text:
+                    ambiguity += f" | Caution noted: {caution_text}"
+
+                records.append(
+                    EthnoPreparationRecord(
+                        verbatim_plant_name=matched_taxon,
+                        plant_part=part,
+                        preparation_type=prep,
+                        solvent_class=solvent,
+                        thermal_regime=thermal,
+                        estimated_ph=ph,
+                        duration_minutes=dur_min,
+                        temperature_celsius=temp_c,
+                        verbatim_indication=indication,
+                        administration_route=route,
+                        verbatim_quote=quote,
+                        cultural_or_geographic_origin=region,
+                        extraction_confidence=0.94,
+                        ambiguity_notes=ambiguity,
+                        source_citation=source_citation,
+                    )
                 )
-            )
 
     return records
 
@@ -581,6 +728,7 @@ def build_atlas_dataset(
             duration_minutes=rec.duration_minutes,
             temperature_celsius=rec.temperature_celsius,
             prepared_part=str(rec.plant_part),
+            preparation_type=str(rec.preparation_type),
         )
 
         top_compound_name = "None documented"
@@ -591,31 +739,63 @@ def build_atlas_dataset(
         tox_alerts: List[str] = []
 
         if compounds:
-            # Sort by plausibility
-            compounds_sorted = sorted(compounds, key=lambda c: c.extraction_plausibility_score, reverse=True)
-            best_c = compounds_sorted[0]
-            top_compound_name = best_c.compound_name
-            top_plausibility = best_c.extraction_plausibility_score
-
             # Collect toxicity alerts across compounds
             for c in compounds:
                 if c.toxicity_alerts:
                     tox_alerts.extend(c.toxicity_alerts)
                     total_toxic_count += len(c.toxicity_alerts)
 
-            # Check macromolecular targets
-            targets = get_targets_for_compound(compound_name=best_c.compound_name, inchi_key=best_c.inchi_key)
-            if targets:
-                t0 = targets[0]
+            # Score candidates: rank candidate compounds with S_ext >= 0.45 by S_ext * (1.0 + align_score)
+            scored_candidates = []
+            for c in compounds:
+                s_ext = c.extraction_plausibility_score
+                c_targets = get_targets_for_compound(compound_name=c.compound_name, inchi_key=c.inchi_key)
+                if not c_targets and c.known_targets:
+                    c_targets = c.known_targets
+
+                c_align = score_mechanistic_alignment(c_targets, rec.verbatim_indication) if c_targets else c.mechanistic_alignment_score
+                if s_ext >= 0.45:
+                    combined_rank = s_ext * (1.0 + c_align)
+                else:
+                    combined_rank = s_ext
+
+                scored_candidates.append({
+                    "compound": c,
+                    "targets": c_targets,
+                    "align_score": c_align,
+                    "combined_rank": combined_rank,
+                    "s_ext": s_ext,
+                })
+
+            scored_candidates.sort(key=lambda item: (item["combined_rank"], item["s_ext"]), reverse=True)
+            best_cand = scored_candidates[0]
+            best_c = best_cand["compound"]
+            top_compound_name = best_c.compound_name
+            top_plausibility = best_c.extraction_plausibility_score
+            best_targets = best_cand["targets"]
+            best_align = best_cand["align_score"]
+
+            if best_targets:
+                t0 = best_targets[0]
                 top_target_gene = t0.gene_symbol or t0.target_name
                 top_pathway = t0.therapeutic_pathway or "Cellular target modulation"
-                align_score = score_mechanistic_alignment(targets, rec.verbatim_indication)
-                if validate_mechanistic_path(best_c.extraction_plausibility_score, align_score):
+                if validate_mechanistic_path(best_c.extraction_plausibility_score, best_align):
                     is_validated = True
                     validated_links_count += 1
 
         unique_tox = sorted(set(tox_alerts))
         tox_str = ", ".join(unique_tox).replace("_", " ") if unique_tox else "None"
+
+        prep_type_str = str(rec.preparation_type).lower().strip()
+        solvent_class_str = str(rec.solvent_class).lower().strip()
+        thermal_regime_str = str(rec.thermal_regime).lower().strip()
+
+        if prep_type_str in ("poultice", "raw") or solvent_class_str in ("none", "none (direct/topical)", ""):
+            solv_str = "None (Direct/Topical)"
+            therm_str = "Ambient (25°C)" if thermal_regime_str in ("none", "cold_ambient", "") else str(rec.thermal_regime).replace("_", " ").title()
+        else:
+            solv_str = str(rec.solvent_class).replace("_", " ").title()
+            therm_str = str(rec.thermal_regime).replace("_", " ").title()
 
         rows.append({
             "Source Page": page_str,
@@ -624,8 +804,8 @@ def build_atlas_dataset(
             "GBIF Status": f"{taxon.taxonomic_status} ({taxon.match_type})",
             "Plant Part": str(rec.plant_part).replace("_", " ").title(),
             "Preparation": str(rec.preparation_type).replace("_", " ").title(),
-            "Solvent": str(rec.solvent_class).replace("_", " ").title(),
-            "Thermal Regime": str(rec.thermal_regime).replace("_", " ").title(),
+            "Solvent": solv_str,
+            "Thermal Regime": therm_str,
             "Route": str(rec.administration_route).title(),
             "Historical Indication": rec.verbatim_indication,
             "Primary Bioactive": top_compound_name,

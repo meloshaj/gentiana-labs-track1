@@ -55,17 +55,18 @@ from src.graph_builder import (
     COLOR_VALIDATED_PATH,
 )
 from src.lotus_retriever import enrich_taxon_compounds, get_compounds_for_taxon
-from src.mechanism import get_targets_for_compound
+from src.mechanism import get_targets_for_compound, score_mechanistic_alignment
 from src.pdf_ingestor import (
     build_atlas_dataset,
     export_atlas_csv,
     export_atlas_jsonld,
+    extract_offline_from_text,
     extract_text_chunks_from_pdf,
     extract_text_chunks_from_text,
     get_sample_corpus_text,
     process_document_chunks,
 )
-from src.schemas import EthnoPreparationRecord, TaxonResolution
+from src.schemas import EthnoPreparationRecord, TargetMechanismRecord, TaxonResolution
 from src.taxonomy import resolve_plant_name
 
 TITLE = "DecoctionGraph"
@@ -242,7 +243,11 @@ def known_taxa() -> List[str]:
 
 
 def _heuristic_extract(text: str, citation: str, region: str) -> List[Dict[str, Any]]:
-    """Offline keyword fallback used only when no LLM key is configured (low confidence)."""
+    """Offline deterministic extractor used when no LLM key is configured."""
+    offline_recs = extract_offline_from_text(text, source_citation=citation, region=region or "Unspecified")
+    if offline_recs:
+        return [r.model_dump(mode="json") for r in offline_recs]
+
     low = text.lower()
     plant = next((t for t in known_taxa() if t.lower() in low), None)
     if plant is None:
@@ -324,6 +329,7 @@ def analyze_records(records_json: str) -> List[Dict[str, Any]]:
             duration_minutes=rec.get("duration_minutes"),
             temperature_celsius=rec.get("temperature_celsius"),
             prepared_part=rec.get("plant_part", "unknown"),
+            preparation_type=rec.get("preparation_type", "decoction"),
         )
         if not compounds:
             compounds = enrich_taxon_compounds(
@@ -334,6 +340,7 @@ def analyze_records(records_json: str) -> List[Dict[str, Any]]:
                 duration_minutes=rec.get("duration_minutes"),
                 temperature_celsius=rec.get("temperature_celsius"),
                 prepared_part=rec.get("plant_part", "unknown"),
+                preparation_type=rec.get("preparation_type", "decoction"),
             )
         out.append({"record": rec, "taxon": taxon, "compounds": [c.model_dump(mode="json") for c in compounds]})
     return out
@@ -441,20 +448,39 @@ def status_for(c: Dict[str, Any], threshold: float, flag_toxic: bool) -> str:
 
 
 def prep_label(rec: Dict[str, Any]) -> str:
-    return (f"{rec['preparation_type'].replace('_', ' ').title()} "
-            f"({rec['solvent_class'].replace('_', ' ')}, {rec['thermal_regime'].replace('_', ' ')})")
+    prep = str(rec.get("preparation_type", "")).lower().strip()
+    solv = str(rec.get("solvent_class", "")).lower().strip()
+    therm = str(rec.get("thermal_regime", "")).lower().strip()
+
+    if prep in ("poultice", "raw") or solv in ("none", "none (direct/topical)", ""):
+        solv_str = "None (Direct/Topical)"
+        therm_str = "Ambient (25°C)" if therm in ("none", "cold_ambient", "") else therm.replace("_", " ")
+    else:
+        solv_str = solv.replace("_", " ")
+        therm_str = therm.replace("_", " ")
+
+    return f"{rec.get('preparation_type', '').replace('_', ' ').title()} ({solv_str}, {therm_str})"
 
 
 def build_frame(analysis: Dict[str, Any], threshold: float, flag_toxic: bool, show_excluded: bool) -> pd.DataFrame:
     rows = []
+    rec_ind = analysis.get("record", {}).get("verbatim_indication", "")
     for c in analysis["compounds"]:
         st_ = status_for(c, threshold, flag_toxic)
         primary_target = "None"
+        align_score = float(c.get("mechanistic_alignment_score", 0.0))
         if c.get("known_targets"):
             t = c["known_targets"][0]
             gene = t.get("gene_symbol", "")
             action = t.get("action_type", "")
             primary_target = f"{gene} ({action})" if gene else action
+            if rec_ind:
+                try:
+                    targets = [TargetMechanismRecord(**tk) if isinstance(tk, dict) else tk for tk in c["known_targets"]]
+                    calc_align = score_mechanistic_alignment(targets, rec_ind)
+                    align_score = max(align_score, calc_align)
+                except Exception:
+                    pass
 
         rows.append({
             "Compound Name": c["compound_name"],
@@ -466,6 +492,7 @@ def build_frame(analysis: Dict[str, Any], threshold: float, flag_toxic: bool, sh
             "Organ Match": c.get("organ_match_factor", 1.0),
             "Thermal Surv": c.get("thermal_survival_fraction", 1.0),
             "Target": primary_target,
+            "Mechanistic Alignment": align_score,
             "Plausibility Score": c["extraction_plausibility_score"],
             "Status": st_,
             "Toxicity Flags": ", ".join(c["toxicity_alerts"]) if flag_toxic else "",
@@ -1138,7 +1165,16 @@ def render_mining_view(cfg: Dict[str, Any]) -> None:
                 lead_logd = 0.0
                 lead_surv = 1.0
                 if not df.empty:
-                    top_row = df.sort_values("Plausibility Score", ascending=False).iloc[0]
+                    def _rank_candidate(row):
+                        s_ext = float(row["Plausibility Score"])
+                        align = float(row.get("Mechanistic Alignment", 0.0))
+                        if s_ext >= 0.45:
+                            return s_ext * (1.0 + align)
+                        return s_ext
+
+                    ranked_df = df.copy()
+                    ranked_df["_rank"] = ranked_df.apply(_rank_candidate, axis=1)
+                    top_row = ranked_df.sort_values(["_rank", "Plausibility Score"], ascending=False).iloc[0]
                     lead_name = top_row["Compound Name"]
                     lead_score = top_row["Plausibility Score"]
                     lead_logd = top_row["logD (pH)"]

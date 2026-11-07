@@ -229,3 +229,151 @@ def test_export_atlas_csv_and_jsonld():
     assert "decoction:PlantTaxon" in types
     assert "decoction:EthnoPreparation" in types
 
+
+def test_skip_summary_matrix_and_markdown_tables():
+    """Verify that summary matrices and markdown reference tables are skipped."""
+    text_with_tables = """=== Page 1 ===
+Gentiana lutea dried roots are boiled in water for an hour to prepare a decoction for stomach weakness.
+
+=== Page 2 ===
+Summary Matrix of Pipeline Results
+| Plant | Part | Preparation | Solvent | Thermal | Indication |
+| --- | --- | --- | --- | --- | --- |
+| Gentiana lutea | root | decoction | water | boiling_prolonged | stomach weakness |
+| Hypericum perforatum | flower | oil_maceration | lipid_oil | warm_steep | burns |
+
+=== Page 3 ===
+Expected DecoctionGraph Pipeline Outputs:
+Taxon \t Preparation \t Target
+Gentiana lutea \t decoction \t TAS2R38
+"""
+    chunks = extract_text_chunks_from_text(text_with_tables)
+    # Only Page 1 should be parsed as a chunk; Pages 2 and 3 are summary tables and must be skipped
+    assert len(chunks) == 1
+    assert chunks[0]["page_number"] == 1
+    assert "Gentiana lutea" in chunks[0]["text"]
+    assert "Summary Matrix" not in chunks[0]["text"]
+
+
+def test_no_cross_sentence_attribute_bleeding_cinchona_and_papaver():
+    """Verify Papaver somniferum and Cinchona pubescens extract clean distinct records without indication bleeding."""
+    passage = (
+        "Cinchona pubescens powdered red bark is steeped in acidic sour wine and vinegar at room temperature "
+        "for two days, taken orally against shaking chills and agues.\n\n"
+        "Papaver somniferum ripe dried seeds are boiled into a porridge for restless infants. "
+        "Conversely, the dried latex harvested from scored green capsules is dissolved in warm wine "
+        "as a potent anodyne for intractable colic and insomnia."
+    )
+    citation = "Herbal Survey (Page 2)"
+    recs = extract_offline_from_text(passage, source_citation=citation, region="Europe")
+
+    # Should cleanly extract 3 distinct preparations across the two plants
+    assert len(recs) == 3
+
+    cinchona_recs = [r for r in recs if r.verbatim_plant_name == "Cinchona pubescens"]
+    papaver_recs = [r for r in recs if r.verbatim_plant_name == "Papaver somniferum"]
+
+    assert len(cinchona_recs) == 1
+    assert len(papaver_recs) == 2
+
+    c_rec = cinchona_recs[0]
+    assert c_rec.plant_part == "bark"
+    assert c_rec.solvent_class == "vinegar_acidic"
+    assert "shaking chills and agues" in c_rec.verbatim_indication.lower()
+    # Ensure Papaver's colic/insomnia/restless indication did NOT bleed into Cinchona
+    assert "colic" not in c_rec.verbatim_indication.lower()
+    assert "restless" not in c_rec.verbatim_indication.lower()
+
+    # Papaver seed porridge
+    p_seed = [r for r in papaver_recs if r.plant_part == "seed"][0]
+    assert p_seed.preparation_type == "decoction"
+    assert "restless infants" in p_seed.verbatim_indication.lower()
+
+    # Papaver latex / capsule tincture
+    p_latex = [r for r in papaver_recs if r.plant_part == "fruit"][0]
+    assert p_latex.preparation_type == "tincture_alcohol"
+    assert p_latex.solvent_class == "hydroalcoholic"
+    assert "intractable colic and insomnia" in p_latex.verbatim_indication.lower()
+
+
+def test_clean_indication_leading_preposition_and_hypericum_trpc6_validation():
+    """Verify leading prepositional indication extraction and Hypericum perforatum TRPC6 validation."""
+    passage = (
+        "Hypericum perforatum: For severe thermal burns, deep skin lacerations, abrasions, and purulent cutaneous wounds, "
+        "fresh flowering tops are packed into virgin olive oil and set in warm sunlight for forty days."
+    )
+    citation = "Trauma Herbal (Page 1)"
+    recs = extract_offline_from_text(passage, source_citation=citation, region="Balkans")
+
+    assert len(recs) == 1
+    r = recs[0]
+    assert r.verbatim_plant_name == "Hypericum perforatum"
+    assert r.plant_part == "flower"
+    assert r.preparation_type == "oil_maceration"
+    assert r.solvent_class == "lipid_oil"
+    assert r.thermal_regime == "warm_steep"
+
+    # Indication must not fall back to 'Historical illness or ailment' and must strip trailing botanical subject clause
+    assert "severe thermal burns" in r.verbatim_indication.lower()
+    assert "fresh flowering tops" not in r.verbatim_indication.lower()
+
+    # Verify building atlas dataset yields Validated Path with TRPC6
+    batch = ExtractionBatch(source_corpus="Trauma Herbal", records=[r])
+    atlas = build_atlas_dataset(batch)
+    df = atlas["atlas_df"]
+    assert not df.empty
+    row = df.iloc[0]
+    assert row["Primary Bioactive"] == "Hyperforin"
+    assert row["Top Target (Gene)"] == "TRPC6"
+    assert row["Mechanistic Status"] == "⭐ Validated Path"
+
+
+def test_poultice_default_solvent_and_thermal_labels_in_csv():
+    """Verify poultice preparations export 'None (Direct/Topical)' and 'Ambient (25°C)' in table/CSV."""
+    passage = (
+        "Symphytum officinale fresh root is ground into a thick pulp and bound as a poultice "
+        "over sprained joints and broken bones to knit the tissues."
+    )
+    citation = "Bone Setter Manual (Page 1)"
+    recs = extract_offline_from_text(passage, source_citation=citation, region="Europe")
+    assert len(recs) == 1
+
+    batch = ExtractionBatch(source_corpus="Bone Setter Manual", records=recs)
+    atlas = build_atlas_dataset(batch)
+    df = atlas["atlas_df"]
+    row = df.iloc[0]
+
+    assert row["Preparation"] == "Poultice"
+    assert row["Solvent"] == "None (Direct/Topical)"
+    assert row["Thermal Regime"] == "Ambient (25°C)"
+
+    # Verify CSV export contains formatted values rather than NaN
+    csv_text = export_atlas_csv(df)
+    assert "None (Direct/Topical)" in csv_text
+    assert "Ambient (25°C)" in csv_text
+    assert "NaN" not in csv_text
+
+
+def test_combined_mechanistic_ranking_artemisia_artemisinin():
+    """Verify cold-wrung Artemisia annua highlights Artemisinin (PfATP6) over Scopoletin (IL6)."""
+    passage = (
+        "Artemisia annua fresh green aerial parts are pounded and wrung cold through silk cloth, "
+        "and the raw fresh juice is drunk immediately to break recurring malarial fevers."
+    )
+    citation = "Ge Hong Herbal (Page 1)"
+    recs = extract_offline_from_text(passage, source_citation=citation, region="China")
+    assert len(recs) == 1
+    r = recs[0]
+    assert r.preparation_type == "juice_wringing"
+
+    batch = ExtractionBatch(source_corpus="Ge Hong Herbal", records=[r])
+    atlas = build_atlas_dataset(batch)
+    df = atlas["atlas_df"]
+    row = df.iloc[0]
+
+    # Artemisinin must be selected as Primary Bioactive due to combined mechanistic ranking
+    assert row["Primary Bioactive"] == "Artemisinin"
+    assert row["Top Target (Gene)"] == "PfATP6"
+    assert row["Mechanistic Status"] == "⭐ Validated Path"
+
+

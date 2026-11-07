@@ -51,6 +51,15 @@ def test_status_for_and_prep_label():
     label = prep_label(rec)
     assert label == "Oil Maceration (lipid oil, warm steep)"
 
+    # Poultice formatting with default None solvent and Ambient thermal regime
+    rec_poultice = {
+        "preparation_type": "poultice",
+        "solvent_class": "none",
+        "thermal_regime": "none",
+    }
+    label_poultice = prep_label(rec_poultice)
+    assert label_poultice == "Poultice (None (Direct/Topical), Ambient (25°C))"
+
     # Plausible high
     comp_high = {
         "compound_name": "Hyperforin",

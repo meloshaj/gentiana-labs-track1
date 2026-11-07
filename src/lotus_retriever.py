@@ -840,6 +840,7 @@ def enrich_taxon_compounds(
     duration_minutes: Optional[float] = None,
     temperature_celsius: Optional[float] = None,
     prepared_part: str = "unknown",
+    preparation_type: str = "decoction",
 ) -> List[PhytochemicalRecord]:
     """Retrieve secondary metabolites for a taxon and compute physicochemical extraction plausibility.
 
@@ -892,6 +893,7 @@ def enrich_taxon_compounds(
             documented_organs=documented_organs,
             known_targets=targets,
             mechanistic_alignment_score=align_score,
+            preparation_type=preparation_type,
         )
         if record is not None:
             enriched_records.append(record)
