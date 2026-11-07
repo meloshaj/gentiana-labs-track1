@@ -61,6 +61,22 @@ def _is_summary_or_table_block(block: str) -> bool:
     if any(ind in b_low for ind in summary_indicators):
         return True
 
+    # Continuation pages of archival summary tables often omit the title and
+    # arrive as plain extracted text rather than markdown.  These headers are
+    # sufficiently distinctive to identify those blocks without discarding
+    # neighboring narrative sections.
+    table_headers = (
+        "route & historical indication",
+        "verbatim & scientific taxon",
+        "temp / time / ph",
+        "plant organ",
+        "preparation & solvent",
+        "taxon preparation target",
+    )
+    normalized = re.sub(r"\s+", " ", b_low)
+    if sum(header in normalized for header in table_headers) >= 1:
+        return True
+
     # Check for markdown table format (| col1 | col2 | or | --- |)
     lines = [l.strip() for l in block.splitlines() if l.strip()]
     if len(lines) >= 2:
@@ -70,6 +86,11 @@ def _is_summary_or_table_block(block: str) -> bool:
             or any(re.match(r"^\|?[\s\-:]+\|[\s\-:|]+$", l) for l in lines)
         ):
             return True
+    # Extracted continuation rows may arrive as a single pipe-delimited line.
+    if any(line.count("|") >= 4 for line in lines):
+        return True
+    if any(line.count("\t") >= 2 for line in lines):
+        return True
 
     return False
 
@@ -83,6 +104,7 @@ def _split_into_sections_or_paragraphs(text: str) -> List[str]:
     split_pattern = (
         r"(?:\n\s*\n+|"
         r"(?<=\n)(?=(?:(?:[0-9]+\.[0-9]+|[0-9]+\.)\s+|[#]{1,4}\s+|Section\s+\d+|Chapter\s+\d+))|"
+        r"(?<=[.!?])\s+(?=Section\s+\d+(?:\.\d+)?)|"
         r"(?<=\n)(?=(?:Gentiana\s+lutea|Hypericum\s+perforatum|Artemisia\s+annua|Cinchona\s+pubescens|Symphytum\s+officinale|Papaver\s+somniferum)\b))"
     )
     raw_blocks = re.split(split_pattern, normalized, flags=re.IGNORECASE)
@@ -182,7 +204,7 @@ def extract_text_chunks_from_pdf(
             page_text = ""
 
         cleaned = re.sub(r"[ \t]+", " ", page_text).strip()
-        if not cleaned or _is_summary_or_table_block(cleaned):
+        if not cleaned:
             continue
 
         blocks = _split_into_sections_or_paragraphs(cleaned)
@@ -225,7 +247,7 @@ def extract_text_chunks_from_text(
             start_pos = m.end()
             end_pos = matches[i + 1].start() if i + 1 < len(matches) else len(clean_text)
             page_body = clean_text[start_pos:end_pos].strip()
-            if not page_body or _is_summary_or_table_block(page_body):
+            if not page_body:
                 continue
 
             blocks = _split_into_sections_or_paragraphs(page_body)
@@ -239,7 +261,7 @@ def extract_text_chunks_from_text(
         chunks = []
         for p_idx, p_text in enumerate(pages, start=1):
             p_clean = p_text.strip()
-            if p_clean and not _is_summary_or_table_block(p_clean):
+            if p_clean:
                 blocks = _split_into_sections_or_paragraphs(p_clean)
                 p_chunks = _pack_blocks_into_chunks(blocks, page_number=p_idx, chunk_size=chunk_size, overlap=overlap)
                 chunks.extend(p_chunks)
@@ -359,7 +381,12 @@ def extract_offline_from_text(
 
         # 3. Process each plant's isolated scope
         for matched_taxon, seg_text in plant_segments:
+            # A single taxon scope can contain multiple recipe sentences
+            # (notably oil maceration followed by an aqueous tea). Process
+            # those as separate atomic units so one preparation cannot mask
+            # the other.
             sub_units = re.split(
+                r"(?<=\.)\s+(?=(?:The|Dried|Fresh|Conversely|In later centuries|On the other hand|Alternatively|In contrast)\b)|"
                 r"\b(?:Conversely|In later centuries|On the other hand|Alternatively|In contrast)\b",
                 seg_text,
                 flags=re.IGNORECASE,
@@ -369,6 +396,16 @@ def extract_offline_from_text(
                 unit = raw_unit.strip()
                 if len(unit) < 15:
                     continue
+
+                # Remove negative vehicle warnings before classifying the
+                # preparation.  Otherwise an oral warning about an oil can
+                # override the subsequent, explicit aqueous tea recipe.
+                unit = re.sub(
+                    r"\b(?:never|do not|warns? against)\s+(?:administer|prepare|preparing|take|use)\s+[^.;\n]+[.;]?",
+                    "",
+                    unit,
+                    flags=re.IGNORECASE,
+                ).strip()
 
                 # Separate recipe instructions from cautionary medical warnings
                 caution_split = re.split(
@@ -413,6 +450,14 @@ def extract_offline_from_text(
                     thermal = "cold_ambient"
                     route = "oral"
                     ph, temp_c, dur_min = 7.0, 20.0, 15.0
+                # Explicit infusion/tea language wins over a reference to
+                # freshly boiled water (which is still a warm steep here).
+                elif re.search(r"\b(steeped?\s+as\s+(?:a\s+)?(?:warm\s+)?aqueous\s+infusion|infusion|tea)\b", low):
+                    prep = "infusion"
+                    solvent = "water"
+                    thermal = "warm_steep"
+                    route = "oral"
+                    ph, temp_c, dur_min = 7.0, 80.0, 30.0
                 elif re.search(r"\b(oil maceration|olive oil|in oil|oil)\b", low) and not re.search(r"\bessential oil\b", low):
                     prep = "oil_maceration"
                     solvent = "lipid_oil"
@@ -459,8 +504,8 @@ def extract_offline_from_text(
                 # C. Historical Indication Extraction
                 # 1. Leading prepositional clauses at beginning of unit or sentence
                 ind_match = re.search(
-                    r"^(?:(?:Conversely|Alternatively|Moreover|Also|Furthermore|In contrast),\s*)?"
-                    r"(?:For|To treat|To cure|To soothe|To quell|To combat|To break|To relieve|Against|In cases of)\s+"
+                    r"(?:^|[.?!;]\s+)(?:(?:Conversely|Alternatively|Moreover|Also|Furthermore|In contrast),\s*)?"
+                    r"(?:For|When treating|In treating|To treat|To remedy|To cure|To soothe|To quell|To combat|To break|To relieve|To arrest)\s+"
                     r"([a-zA-Z\s,\-]+?)"
                     r"(?=,\s*(?:the\s+)?(?:fresh|dried|finely|powdered|macerated|chopped|pounded|crushed|leaves|roots|bark|flowers|seeds|aerial|green|capsules|latex|herb|parts|plant|rhizomes)|\s+(?:is|are|was|were)\s+|[.;]|$)",
                     unit,
@@ -469,16 +514,17 @@ def extract_offline_from_text(
                 if not ind_match:
                     # 2. Curative or administration action verbs inside sentence
                     ind_match = re.search(
-                        r"(?:administered(?:\s+orally|\s+topically)?\s+to\s+(?:treat|cure|soothe|quell|relieve)|"
-                        r"to\s+(?:cure|soothe|treat|combat|quell|relieve|break)|"
+                        r"(?:administered(?:\s+orally|\s+topically)?(?:\s+[^.;\n]+?)?\s+to\s+(?:remedy|treat|cure|soothe|quell|relieve|arrest)|"
+                        r"administered\s+for|"
+                        r"to\s+(?:remedy|cure|soothe|treat|combat|quell|relieve|break|heal|alleviate|arrest|stimulate)|"
                         r"applied(?:\s+topically)?\s+to\s+(?:soothe|treat|cure|heal|quell|relieve)|"
-                        r"taken(?:\s+orally)?\s+to\s+(?:cure|soothe|treat|quell|relieve|break)|"
+                        r"taken(?:\s+orally)?\s+to\s+(?:remedy|cure|soothe|treat|combat|quell|relieve|break|heal|alleviate|arrest)|"
                         r"used\s+(?:for|to\s+treat|to\s+cure|against)|"
                         r"prescribed\s+(?:for|to\s+treat|against)|"
                         r"prized\s+for|indicated\s+for|virtue\s+for|remedy\s+for|against|anodyne\s+for|"
                         r"as\s+(?:a|an)\s+(?:potent\s+)?anodyne\s+for)\s+"
                         r"([a-zA-Z\s,\-]+?)"
-                        r"(?=[.;]|\band taken|\band drunk|\band applied|\band administered|\byielding|\bthough\b|\bwith\b|\bafter\b|$)",
+                        r"(?=[.;]|\band taken|\band drunk|\band applied|\band administered|\byielding|\bthough\b|\bafter\b|$)",
                         unit,
                         re.IGNORECASE,
                     )

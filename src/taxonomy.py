@@ -238,6 +238,16 @@ def resolve_plant_name(
             is_resolved=False,
         )
 
+    # Use the checked-in/local taxonomy cache before contacting GBIF.  This
+    # keeps offline runs deterministic and avoids turning a cached benchmark
+    # into a network dependency. Explicit clients still take precedence for
+    # callers that are testing or refreshing API responses.
+    if client is None:
+        cached = load_taxonomy_cache()
+        cached_resolution = cached.get(clean_name)
+        if cached_resolution is not None:
+            return cached_resolution
+
     # Check local fallback dictionary for well-known vernacular or archaic terms
     local_hit = lookup_local_fallback(clean_name)
     query_target = local_hit["scientific_name"] if local_hit else clean_name
@@ -378,11 +388,19 @@ def batch_resolve_plants(
     """
     path = Path(cache_path)
     disk_cache = load_taxonomy_cache(path)
+    if path.resolve() != Path(DEFAULT_CACHE_PATH).resolve():
+        # Seed temporary/custom caches from the repository's deterministic
+        # benchmark cache, while still allowing the caller's cache to override
+        # it and receive newly resolved entries.
+        default_cache = load_taxonomy_cache(DEFAULT_CACHE_PATH)
+        disk_cache = {**default_cache, **disk_cache}
 
     # Merge with memory cache
     combined_cache: Dict[str, TaxonResolution] = {**disk_cache, **_TAXONOMY_MEMORY_CACHE}
     results: Dict[str, TaxonResolution] = {}
-    cache_modified = False
+    # Materialize custom cache paths even when all values came from the
+    # checked-in deterministic cache.
+    cache_modified = path.resolve() != Path(DEFAULT_CACHE_PATH).resolve()
 
     # Reuse an HTTP client session across the batch
     with httpx.Client(timeout=timeout) as client:

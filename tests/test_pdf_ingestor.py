@@ -72,6 +72,43 @@ def test_extract_text_chunks_from_text_synthetic_pages():
     assert chunks[1]["page_number"] == 2
 
 
+def test_four_page_sharr_corpus_preserves_narrative_and_skips_summary_table():
+    """Regression coverage for the four-page Sharr Mountains archival layout."""
+    corpus = """=== Page 1 ===
+Gentiana lutea roots are administered orally 20 minutes before meals to remedy stomach weakness, chronic dyspepsia, sluggish digestion, and complete loss of appetite.
+Hypericum perforatum flowering tops are packed into olive oil to treat severe cutaneous burns, deep abrasions, lacerations, and purulent skin wound infections.
+The dried leaves and flowers are steeped as a warm aqueous infusion in freshly boiled water at 80°C to soothe internal melancholia, nervous anxiety, mild depression, and restlessness with insomnia. Practitioners never administer the olive oil maceration orally.
+
+=== Page 2 ===
+The regional materia medica records several additional preparations and seasonal gathering practices.
+
+=== Page 3 ===
+Section 4.1 Cinchona pubescens bark is macerated in vinegar and taken orally to treat shaking chills, intermittent fevers, and ague tremors.
+Section 4.2 Papaver somniferum capsules are prepared as a hydroalcoholic tincture and taken orally to arrest intractable postoperative pain, severe visceral colic cramps, and exhausting irritable coughs.
+Section 5 Summary Table
+
+=== Page 4 ===
+Verbatim & Scientific Taxon | Route & Historical Indication | Temp / Time / pH | Plant Organ | Preparation & Solvent
+Cinchona pubescens | shaking chills | 20C | bark | infusion & vinegar
+Papaver somniferum | postoperative pain | 25C | capsule | tincture & hydroalcoholic
+"""
+    chunks = extract_text_chunks_from_text(corpus)
+    assert [chunk["page_number"] for chunk in chunks] == [1, 2, 3]
+    assert "Verbatim & Scientific Taxon" not in "\n".join(chunk["text"] for chunk in chunks)
+
+    batch = process_document_chunks(chunks, "Traditional Phytotherapeutic Preparations of the Sharr Mountains", force_offline=True)
+    records = batch.records
+    assert {record.verbatim_plant_name for record in records} >= {
+        "Gentiana lutea", "Hypericum perforatum", "Cinchona pubescens", "Papaver somniferum"
+    }
+    assert any("complete loss of appetite" in record.verbatim_indication for record in records)
+    assert any("restlessness with insomnia" in record.verbatim_indication for record in records)
+    assert any("ague tremors" in record.verbatim_indication for record in records)
+    assert any("exhausting irritable coughs" in record.verbatim_indication for record in records)
+    tea = next(record for record in records if record.verbatim_plant_name == "Hypericum perforatum" and record.preparation_type == "infusion")
+    assert (tea.plant_part, tea.solvent_class, tea.thermal_regime) == ("leaf", "water", "warm_steep")
+
+
 def test_extract_offline_from_text():
     """Verify deterministic offline extraction of preparation filters from archival text."""
     passage = (

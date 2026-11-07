@@ -3,7 +3,7 @@
 > **Preparation-Aware Ethnobotanical Knowledge Mining & Cheminformatics Filtering**  
 > *Gentiana Labs | EthnoHack 2026 (Track 1)*
 
-[![Tests](https://img.shields.io/badge/pytest-87%20passed-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/pytest-93%20tests-brightgreen.svg)](#testing)
 [![Python](https://img.shields.io/badge/python-3.12-blue.svg)](#installation)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -128,7 +128,7 @@ python -m src.graph_builder
 
 ## 🧪 Testing
 
-DecoctionGraph is thoroughly tested with 87 automated test cases covering schemas, taxonomy, cheminformatics, physical chemistry kinetics, retrieval, reverse pharmacology, PDF ingestion, graph topology, and UI components:
+DecoctionGraph is thoroughly tested with 93 automated test cases covering schemas, taxonomy, cheminformatics, physical chemistry kinetics, retrieval, reverse pharmacology, PDF ingestion, graph topology, and UI components:
 
 ```bash
 python -m pytest -v
