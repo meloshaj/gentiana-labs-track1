@@ -178,6 +178,7 @@ DecoctionGraph is built upon authoritative open-access scientific resources:
 ## 🤖 AI Usage & Development Disclosure
 
 In compliance with the EthnoHack 2026 rubric on responsible and transparent AI engineering:
+- **AI-Assisted Development**: Google Gemini and OpenAI models were used during the hackathon for software architecture pair-programming, unit test scaffolding, and documentation formatting. All code, mathematical models, and scientific references were reviewed and validated by the Gentiana Labs team.
 - **Large Language Models**: Used for structured entity extraction from unstructured historical literature (`src/extraction.py`, `src/pdf_ingestor.py`) using OpenAI-compatible structured outputs constrained by strict Pydantic v2 schemas. Every extracted record enforces exact, unedited `verbatim_quote` verification to prevent hallucination.
 - **Deterministic Scientific Algorithms**: Taxonomic alignment, 2D descriptor calculation, SMARTS structural alert detection, Henderson-Hasselbalch ionization equilibria, and Arrhenius thermal degradation kinetics are computed deterministically using RDKit and NumPy, completely independent of generative LLM outputs.
 - **Human Oversight & Verification**: Benchmark chemical profiles, target mechanisms, and journal DOIs were curated and cross-referenced against peer-reviewed literature and regulatory monographs.
