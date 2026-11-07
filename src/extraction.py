@@ -72,25 +72,51 @@ Core Instructions:
 # LLM Client Factory
 # ==============================================================================
 
-def get_llm_client() -> OpenAI:
-    """Instantiate and configure an OpenAI-compatible client.
+def get_llm_client() -> Union[OpenAI, Any]:
+    """Instantiate and configure an LLM client across multi-provider backends.
 
-    Reads API key from LLM_API_KEY (falling back to OPENAI_API_KEY).
-    Supports optional LLM_BASE_URL (for Groq, OpenRouter, vLLM, or Ollama).
+    Supports:
+      1. Azure OpenAI: when AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT are set.
+      2. Google Gemini: when GEMINI_API_KEY is present and no standard OpenAI key is configured.
+      3. Standard OpenAI / compatible (Groq, Ollama, OpenRouter, vLLM): via LLM_API_KEY or OPENAI_API_KEY.
 
     Returns:
-        OpenAI client instance.
+        Configured OpenAI or AzureOpenAI client instance.
 
     Raises:
-        ValueError: If no API key is configured.
+        ValueError: If no valid API key is configured.
     """
-    api_key = os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        raise ValueError(
-            "Missing LLM API key. Set 'LLM_API_KEY' or 'OPENAI_API_KEY' in your environment or .env file."
+    # 1. Azure OpenAI
+    azure_key = os.getenv("AZURE_OPENAI_API_KEY")
+    azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+    if azure_key and azure_endpoint:
+        from openai import AzureOpenAI
+        api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-08-01-preview")
+        return AzureOpenAI(
+            api_key=azure_key,
+            azure_endpoint=azure_endpoint,
+            api_version=api_version,
         )
+
+    # 2. Google Gemini API (via OpenAI-compatible endpoint)
+    gemini_key = os.getenv("GEMINI_API_KEY")
+    standard_key = os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY")
+    if gemini_key and not standard_key:
+        base_url = os.getenv(
+            "LLM_BASE_URL",
+            "https://generativelanguage.googleapis.com/v1beta/openai/",
+        )
+        return OpenAI(api_key=gemini_key, base_url=base_url)
+
+    # 3. Standard OpenAI / Custom Base URL
+    if not standard_key:
+        raise ValueError(
+            "Missing LLM API key. Set 'LLM_API_KEY', 'OPENAI_API_KEY', 'GEMINI_API_KEY', "
+            "or 'AZURE_OPENAI_API_KEY' in your environment or .env file."
+        )
+
     base_url = os.getenv("LLM_BASE_URL")
-    return OpenAI(api_key=api_key, base_url=base_url if base_url else None)
+    return OpenAI(api_key=standard_key, base_url=base_url if base_url else None)
 
 
 # ==============================================================================

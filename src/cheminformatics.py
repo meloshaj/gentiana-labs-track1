@@ -46,8 +46,7 @@ STRUCTURAL_ALERT_DEFINITIONS: Dict[str, List[str]] = {
     "aristolochic_acid_derivative": [
         # Explicit spec pattern
         "c1cc2c(cc1)c1c(c(c2)O)c(=O)oc1",
-        # Phenanthrene lactone / aristolic acid / aristolactam cores
-        "c1ccc2c(c1)ccc1ccccc21",
+        # Phenanthrene lactone / aristolic acid / aristolactam core
         "c1cc2c(cc1)c1c(c2)c(=O)oc1",
     ],
     "ptaquiloside_illudane_skeleton": [
@@ -862,12 +861,19 @@ def create_phytochemical_record(
     organ_factor = compute_organ_factor(prepared_part, organs)
 
     mol = Chem.MolFromSmiles(desc["smiles"])
+    calc_ikey = None
     if mol is not None:
+        try:
+            calc_ikey = Chem.MolToInchiKey(mol)
+        except Exception:
+            pass
         surv_fraction, half_life_100c, is_thermolabile = compute_arrhenius_survival(
             mol=mol, temp_c=temp_c, duration_min=dur_min, mw=desc["mw"], tpsa=desc["tpsa"]
         )
     else:
         surv_fraction, half_life_100c, is_thermolabile = 1.0, None, desc["is_thermolabile"]
+
+    final_inchi_key = calc_ikey or desc.get("inchi_key") or ""
 
     score = calculate_extraction_plausibility(
         descriptors=desc,
@@ -886,7 +892,7 @@ def create_phytochemical_record(
     return PhytochemicalRecord(
         compound_name=compound_name,
         smiles=desc["smiles"],
-        inchi_key=desc["inchi_key"],
+        inchi_key=final_inchi_key,
         molecular_formula=desc["molecular_formula"],
         mw=desc["mw"],
         clogp=desc["clogp"],

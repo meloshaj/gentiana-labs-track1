@@ -228,3 +228,4 @@ def test_export_atlas_csv_and_jsonld():
     assert "schema:CreativeWork" in types
     assert "decoction:PlantTaxon" in types
     assert "decoction:EthnoPreparation" in types
+

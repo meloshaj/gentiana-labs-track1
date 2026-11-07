@@ -135,6 +135,33 @@ def test_get_llm_client_missing_key(monkeypatch):
     """Verify ValueError is raised when no API key is set."""
     monkeypatch.delenv("LLM_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("AZURE_OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
 
     with pytest.raises(ValueError, match="Missing LLM API key"):
         get_llm_client()
+
+
+def test_get_llm_client_azure(monkeypatch):
+    """Verify get_llm_client instantiates AzureOpenAI when Azure env vars are set."""
+    monkeypatch.setenv("AZURE_OPENAI_API_KEY", "dummy_azure_key")
+    monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://test-resource.openai.azure.com")
+    monkeypatch.setenv("AZURE_OPENAI_API_VERSION", "2024-08-01-preview")
+
+    from openai import AzureOpenAI
+    client = get_llm_client()
+    assert isinstance(client, AzureOpenAI)
+
+
+def test_get_llm_client_gemini(monkeypatch):
+    """Verify get_llm_client routes to Google Gemini endpoint when GEMINI_API_KEY is present."""
+    from openai import OpenAI
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("AZURE_OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "dummy_gemini_key")
+
+    client = get_llm_client()
+    assert isinstance(client, OpenAI)
+    assert "generativelanguage.googleapis.com" in str(client.base_url)
+

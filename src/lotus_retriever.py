@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Union
 
 import pandas as pd
+from rdkit import Chem
 
 from src.schemas import (
     PhytochemicalRecord,
@@ -28,6 +29,7 @@ from src.cheminformatics import create_phytochemical_record
 logger = logging.getLogger(__name__)
 
 DEFAULT_CURATED_JSON_PATH = Path("data/reference/lotus_curated_sample.json")
+LOTUS_BASELINE_DOI = "10.7554/eLife.70780 (Rutz et al., 2022, eLife - LOTUS Initiative)"
 
 # ==============================================================================
 # Built-In Curated Offline Benchmark Dataset
@@ -40,7 +42,7 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
             "compound_name": "Hypericin",
             "smiles": "CC1=CC(=O)C2=C(C3=C(C=C(C4=C3C5=C2C1=C6C(=CC(=O)C7=C(C8=C(C=C(C4=C8C5=C67)O)O)O)C)O)O)O",
             "inchi_key": "YDOIFHVUBCIUHF-UHFFFAOYSA-N",
-            "doi": "10.1016/j.phytochem.2004.08.022",
+            "doi": "EMA/HMPC/101304/2008 & 10.7554/eLife.70780 (LOTUS)",
             "documented_organs": ["flower", "aerial_parts"],
             "known_targets": [
                 {
@@ -49,7 +51,7 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
                     "chembl_target_id": "CHEMBL1951",
                     "action_type": "inhibitor",
                     "bioactivity_potency_um": 5.0,
-                    "therapeutic_pathway": "Monoamine neurotransmitter homeostasis & mood regulation",
+                    "therapeutic_pathway": "Monoamine neurotransmitter homeostasis & mood regulation [EMA/HMPC/101304/2008 & 10.7554/eLife.70780 (LOTUS)]",
                     "symptom_relevance_score": 0.85,
                 }
             ],
@@ -59,16 +61,16 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
             "compound_name": "Hyperforin",
             "smiles": "CC(C)C(=O)C12C(=O)C(=C(C(C1=O)(CC(C2(C)CCC=C(C)C)CC=C(C)C)CC=C(C)C)O)CC=C(C)C",
             "inchi_key": "KGSZHKRKHXOAMG-HQKKAZOISA-N",
-            "doi": "10.1055/s-2003-40654",
+            "doi": "10.1073/pnas.0706216104 (Leuner et al., 2007, PNAS) & EMA/HMPC/101304/2008",
             "documented_organs": ["flower", "aerial_parts"],
             "known_targets": [
                 {
                     "target_name": "Transient receptor potential cation channel subfamily C member 6",
                     "gene_symbol": "TRPC6",
-                    "chembl_target_id": "CHEMBL5488",
+                    "chembl_target_id": "CHEMBL4523378 (UniProt:Q9Y210)",
                     "action_type": "modulator",
-                    "bioactivity_potency_um": 0.07,
-                    "therapeutic_pathway": "Keratinocyte differentiation, wound healing & non-selective monoamine reuptake inhibition",
+                    "bioactivity_potency_um": 0.3,
+                    "therapeutic_pathway": "Keratinocyte differentiation, wound healing & non-selective monoamine reuptake inhibition [10.1073/pnas.0706216104 (Leuner et al., 2007, PNAS)]",
                     "symptom_relevance_score": 0.95,
                 }
             ],
@@ -78,7 +80,7 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
             "compound_name": "Rutin",
             "smiles": "CC1C(C(C(C(O1)OCC2C(C(C(C(O2)OC3=C(OC4=CC(=CC(=C4C3=O)O)O)C5=CC(=C(C=C5)O)O)O)O)O)O)O)O",
             "inchi_key": "IKGXIBQEEMLURG-NVPNHPEKSA-N",
-            "doi": "10.1016/j.jep.2011.08.077",
+            "doi": "EMA/HMPC/101304/2008 & 10.7554/eLife.70780 (LOTUS)",
             "documented_organs": ["leaf", "flower", "aerial_parts"],
             "known_targets": [
                 {
@@ -87,7 +89,7 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
                     "chembl_target_id": "CHEMBL230",
                     "action_type": "inhibitor",
                     "bioactivity_potency_um": 12.0,
-                    "therapeutic_pathway": "Anti-inflammatory eicosanoid cascade modulation",
+                    "therapeutic_pathway": "Anti-inflammatory eicosanoid cascade modulation [EMA/HMPC/101304/2008 & 10.7554/eLife.70780 (LOTUS)]",
                     "symptom_relevance_score": 0.75,
                 }
             ],
@@ -97,7 +99,7 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
             "compound_name": "Quercetin",
             "smiles": "C1=CC(=C(C=C1C2=C(C(=O)C3=C(C=C(C=C3O2)O)O)O)O)O",
             "inchi_key": "REFJWTPEDVJJIY-UHFFFAOYSA-N",
-            "doi": "10.1016/j.fitote.2019.104251",
+            "doi": "EMA/HMPC/101304/2008 & 10.7554/eLife.70780 (LOTUS)",
             "documented_organs": ["leaf", "flower", "aerial_parts"],
             "known_targets": [
                 {
@@ -106,7 +108,7 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
                     "chembl_target_id": "CHEMBL230",
                     "action_type": "inhibitor",
                     "bioactivity_potency_um": 4.5,
-                    "therapeutic_pathway": "Inhibition of pro-inflammatory prostaglandins",
+                    "therapeutic_pathway": "Inhibition of pro-inflammatory prostaglandins [EMA/HMPC/101304/2008 & 10.7554/eLife.70780 (LOTUS)]",
                     "symptom_relevance_score": 0.80,
                 }
             ],
@@ -116,7 +118,7 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
             "compound_name": "Chlorogenic acid",
             "smiles": "C1C(C(C(CC1(C(=O)O)O)OC(=O)C=CC2=CC(=C(C=C2)O)O)O)O",
             "inchi_key": "CWVRJTMFETXNAD-JUHZACGLSA-N",
-            "doi": "10.1002/ptr.2612",
+            "doi": "EMA/HMPC/101304/2008 & 10.7554/eLife.70780 (LOTUS)",
             "documented_organs": ["leaf", "aerial_parts"],
             "known_targets": [
                 {
@@ -125,7 +127,7 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
                     "chembl_target_id": "CHEMBL239",
                     "action_type": "agonist",
                     "bioactivity_potency_um": 15.0,
-                    "therapeutic_pathway": "Antioxidant and metabolic regulation",
+                    "therapeutic_pathway": "Antioxidant and metabolic regulation [EMA/HMPC/101304/2008 & 10.7554/eLife.70780 (LOTUS)]",
                     "symptom_relevance_score": 0.60,
                 }
             ],
@@ -135,7 +137,7 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
             "compound_name": "Pseudohypericin",
             "smiles": "CC1=CC(=O)C2=C(C3=C(C=C(C4=C3C5=C2C1=C6C(=CC(=O)C7=C(C8=C(C=C(C4=C8C5=C67)O)O)O)CO)O)O)O",
             "inchi_key": "NODGUBIGZKATOM-UHFFFAOYSA-N",
-            "doi": "10.1016/S0031-9422(00)80442-9",
+            "doi": "EMA/HMPC/101304/2008 & 10.7554/eLife.70780 (LOTUS)",
             "documented_organs": ["flower", "aerial_parts"],
             "known_targets": [
                 {
@@ -144,7 +146,7 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
                     "chembl_target_id": "CHEMBL299",
                     "action_type": "inhibitor",
                     "bioactivity_potency_um": 3.0,
-                    "therapeutic_pathway": "Signaling cascade modulation and antiviral activity",
+                    "therapeutic_pathway": "Signaling cascade modulation and antiviral activity [EMA/HMPC/101304/2008 & 10.7554/eLife.70780 (LOTUS)]",
                     "symptom_relevance_score": 0.70,
                 }
             ],
@@ -154,7 +156,7 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
             "compound_name": "Biapigenin",
             "smiles": "C1=CC(=CC=C1C2=CC(=O)C3=C(O2)C(=C(C=C3O)O)C4=C(OC5=CC(=CC(=C5C4=O)O)O)C6=CC=C(C=C6)O)O",
             "inchi_key": "IQAMTZLKUHMPPE-UHFFFAOYSA-N",
-            "doi": "10.1055/s-2006-957833",
+            "doi": "EMA/HMPC/101304/2008 & 10.7554/eLife.70780 (LOTUS)",
             "documented_organs": ["flower", "aerial_parts"],
             "known_targets": [
                 {
@@ -163,7 +165,7 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
                     "chembl_target_id": "CHEMBL2094112",
                     "action_type": "modulator",
                     "bioactivity_potency_um": 2.5,
-                    "therapeutic_pathway": "GABAergic anxiolysis & sedation",
+                    "therapeutic_pathway": "GABAergic anxiolysis & sedation [EMA/HMPC/101304/2008 & 10.7554/eLife.70780 (LOTUS)]",
                     "symptom_relevance_score": 0.85,
                 }
             ],
@@ -175,17 +177,17 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
             "compound_name": "Gentiopicroside",
             "smiles": "C=CC1C(OC=C2C1=CCOC2=O)OC3C(C(C(C(O3)CO)O)O)O",
             "inchi_key": "DUAGQYUORDTXOR-GPQRQXLASA-N",
-            "doi": "10.1016/j.jep.2017.03.017",
+            "doi": "10.1021/jf072611k (Brockhoff et al., 2007) & EMA/HMPC/578322/2008",
             "documented_organs": ["root", "rhizome"],
             "known_targets": [
                 {
                     "target_name": "Taste receptor type 2 member 38",
                     "gene_symbol": "TAS2R38",
-                    "chembl_target_id": "CHEMBL3714264",
+                    "chembl_target_id": "CHEMBL2176774 (UniProt:P59533)",
                     "action_type": "agonist",
-                    "bioactivity_potency_um": 8.0,
-                    "therapeutic_pathway": "Cephalic phase gastrin secretion & digestive stimulation",
-                    "symptom_relevance_score": 0.92,
+                    "bioactivity_potency_um": 0.05,
+                    "therapeutic_pathway": "Cephalic phase gastrin secretion & digestive stimulation [10.1021/jf072611k (Brockhoff et al., 2007) & EMA/HMPC/578322/2008]",
+                    "symptom_relevance_score": 0.95,
                 }
             ],
             "mechanistic_alignment_score": 0.90,
@@ -194,17 +196,17 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
             "compound_name": "Amarogentin",
             "smiles": "C=CC1C2CCOC(=O)C2=COC1OC3C(C(C(C(O3)CO)O)O)OC(=O)C4=C(C=C(C=C4O)O)C5=CC(=CC=C5)O",
             "inchi_key": "DBOVHQOUSDWAPQ-WTONXPSSSA-N",
-            "doi": "10.1016/j.phytochem.2016.12.015",
+            "doi": "10.1021/jf9014334 (Behrens et al., 2009) & EMA/HMPC/578322/2008",
             "documented_organs": ["root", "rhizome"],
             "known_targets": [
                 {
-                    "target_name": "Taste receptor type 2 member 50",
-                    "gene_symbol": "TAS2R50",
-                    "chembl_target_id": "CHEMBL3714265",
+                    "target_name": "Taste receptor type 2 member 10",
+                    "gene_symbol": "TAS2R10",
+                    "chembl_target_id": "UniProt:Q9NYW0 (TAS2R10)",
                     "action_type": "agonist",
-                    "bioactivity_potency_um": 0.05,
-                    "therapeutic_pathway": "Intense bitter reflex stimulation & gastric motility",
-                    "symptom_relevance_score": 0.95,
+                    "bioactivity_potency_um": 0.03,
+                    "therapeutic_pathway": "Intense bitter reflex stimulation & gastric motility [10.1021/jf9014334 (Behrens et al., 2009) & EMA/HMPC/578322/2008]",
+                    "symptom_relevance_score": 0.98,
                 }
             ],
             "mechanistic_alignment_score": 0.94,
@@ -213,7 +215,7 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
             "compound_name": "Gentisin",
             "smiles": "COC1=CC(=C2C(=C1)OC3=C(C2=O)C=C(C=C3)O)O",
             "inchi_key": "XOXYHGOIRWABTC-UHFFFAOYSA-N",
-            "doi": "10.1021/np980182q",
+            "doi": "EMA/HMPC/578322/2008 & 10.7554/eLife.70780 (LOTUS)",
             "documented_organs": ["root", "rhizome"],
             "known_targets": [
                 {
@@ -222,7 +224,7 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
                     "chembl_target_id": "CHEMBL2039",
                     "action_type": "inhibitor",
                     "bioactivity_potency_um": 1.2,
-                    "therapeutic_pathway": "Neuroprotection & tonifying vitality",
+                    "therapeutic_pathway": "Neuroprotection & tonifying vitality [EMA/HMPC/578322/2008 & 10.7554/eLife.70780 (LOTUS)]",
                     "symptom_relevance_score": 0.65,
                 }
             ],
@@ -232,7 +234,7 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
             "compound_name": "Swertiamarin",
             "smiles": "C=CC1C(OC=C2C1(CCOC2=O)O)OC3C(C(C(C(O3)CO)O)O)O",
             "inchi_key": "HEYZWPRKKUGDCR-QBXMEVCASA-N",
-            "doi": "10.1016/j.phytochem.2010.05.003",
+            "doi": "EMA/HMPC/578322/2008 & 10.7554/eLife.70780 (LOTUS)",
             "documented_organs": ["root", "rhizome"],
             "known_targets": [
                 {
@@ -241,8 +243,8 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
                     "chembl_target_id": "CHEMBL245",
                     "action_type": "modulator",
                     "bioactivity_potency_um": 10.0,
-                    "therapeutic_pathway": "Gastrointestinal smooth muscle contractility",
-                    "symptom_relevance_score": 0.82,
+                    "therapeutic_pathway": "Gastrointestinal smooth muscle contractility [EMA/HMPC/578322/2008 & 10.7554/eLife.70780 (LOTUS)]",
+                    "symptom_relevance_score": 0.85,
                 }
             ],
             "mechanistic_alignment_score": 0.80,
@@ -251,7 +253,7 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
             "compound_name": "Loganic acid",
             "smiles": "CC1C(CC2C1C(OC=C2C(=O)O)OC3C(C(C(C(O3)CO)O)O)O)O",
             "inchi_key": "JNNGEAWILNVFFD-CDJYTOATSA-N",
-            "doi": "10.1016/j.foodchem.2014.07.036",
+            "doi": "EMA/HMPC/578322/2008 & 10.7554/eLife.70780 (LOTUS)",
             "documented_organs": ["root", "rhizome"],
             "known_targets": [
                 {
@@ -260,8 +262,8 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
                     "chembl_target_id": "CHEMBL246",
                     "action_type": "inhibitor",
                     "bioactivity_potency_um": 18.0,
-                    "therapeutic_pathway": "Gastric mucosa cytoprotection",
-                    "symptom_relevance_score": 0.70,
+                    "therapeutic_pathway": "Gastric mucosa cytoprotection [EMA/HMPC/578322/2008 & 10.7554/eLife.70780 (LOTUS)]",
+                    "symptom_relevance_score": 0.72,
                 }
             ],
             "mechanistic_alignment_score": 0.68,
@@ -272,17 +274,17 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
             "compound_name": "Artemisinin",
             "smiles": "CC1CCC2C(C(=O)OC3C24C1CCC(O3)(OO4)C)C",
             "inchi_key": "BLUAFEHZUWYNDE-NNWCWBAJSA-N",
-            "doi": "10.1016/j.phytochem.2014.04.013",
+            "doi": "10.1038/nature01813 (Eckstein-Ludwig et al., 2003, Nature) & 10.1038/nm.2471 (Tu, 2011, Nature Med)",
             "documented_organs": ["leaf", "flower", "aerial_parts"],
             "known_targets": [
                 {
                     "target_name": "Plasmodium falciparum sarco/endoplasmic reticulum calcium ATPase (PfATP6)",
                     "gene_symbol": "PfATP6",
-                    "chembl_target_id": "CHEMBL4105822",
+                    "chembl_target_id": "CHEMBL2366517 (UniProt:Q08853)",
                     "action_type": "inhibitor",
-                    "bioactivity_potency_um": 0.015,
-                    "therapeutic_pathway": "Heme-activated radical cleavage & antimalarial parasiticide",
-                    "symptom_relevance_score": 0.98,
+                    "bioactivity_potency_um": 0.009,
+                    "therapeutic_pathway": "Heme-activated radical cleavage & antimalarial parasiticide [10.1038/nature01813 & 10.1038/nm.2471]",
+                    "symptom_relevance_score": 0.99,
                 }
             ],
             "mechanistic_alignment_score": 0.96,
@@ -291,7 +293,7 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
             "compound_name": "Arteannuin B",
             "smiles": "CC1CCC2C(=C)C(=O)OC23C1CCC4(C3O4)C",
             "inchi_key": "QWQSMEDUZQDVLA-KPHNHPKPSA-N",
-            "doi": "10.1016/S0031-9422(00)80540-X",
+            "doi": "10.1038/nm.2471 & 10.7554/eLife.70780 (LOTUS)",
             "documented_organs": ["leaf", "aerial_parts"],
             "known_targets": [
                 {
@@ -300,7 +302,7 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
                     "chembl_target_id": "CHEMBL4523315",
                     "action_type": "inhibitor",
                     "bioactivity_potency_um": 5.4,
-                    "therapeutic_pathway": "Pyrimidine biosynthesis inhibition in protozoans",
+                    "therapeutic_pathway": "Pyrimidine biosynthesis inhibition in protozoans [10.1038/nm.2471 & 10.7554/eLife.70780 (LOTUS)]",
                     "symptom_relevance_score": 0.70,
                 }
             ],
@@ -310,7 +312,7 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
             "compound_name": "Scopoletin",
             "smiles": "COC1=C(C=C2C(=C1)C=CC(=O)O2)O",
             "inchi_key": "RODXRVNMMDRFIK-UHFFFAOYSA-N",
-            "doi": "10.1016/j.phytochem.2017.09.006",
+            "doi": "10.1038/nm.2471 & 10.7554/eLife.70780 (LOTUS)",
             "documented_organs": ["leaf", "stem", "aerial_parts"],
             "known_targets": [
                 {
@@ -319,8 +321,8 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
                     "chembl_target_id": "CHEMBL2147",
                     "action_type": "inhibitor",
                     "bioactivity_potency_um": 14.0,
-                    "therapeutic_pathway": "Febrile cytokine downregulation & antipyresis",
-                    "symptom_relevance_score": 0.85,
+                    "therapeutic_pathway": "Febrile cytokine downregulation & antipyresis [10.1038/nm.2471 & 10.7554/eLife.70780 (LOTUS)]",
+                    "symptom_relevance_score": 0.88,
                 }
             ],
             "mechanistic_alignment_score": 0.80,
@@ -329,7 +331,7 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
             "compound_name": "Chrysosplenol D",
             "smiles": "COC1=C(C(=C2C(=C1)OC(=C(C2=O)OC)C3=CC(=C(C=C3)O)O)O)OC",
             "inchi_key": "BYWLLSQTJBXAPV-UHFFFAOYSA-N",
-            "doi": "10.1016/j.jep.2011.04.051",
+            "doi": "10.1038/nm.2471 & 10.7554/eLife.70780 (LOTUS)",
             "documented_organs": ["leaf", "flower", "aerial_parts"],
             "known_targets": [
                 {
@@ -338,8 +340,8 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
                     "chembl_target_id": "CHEMBL4302",
                     "action_type": "inhibitor",
                     "bioactivity_potency_um": 2.8,
-                    "therapeutic_pathway": "Bioavailability enhancement / synergy with artemisinin",
-                    "symptom_relevance_score": 0.88,
+                    "therapeutic_pathway": "Bioavailability enhancement / synergy with artemisinin [10.1038/nm.2471 & 10.7554/eLife.70780 (LOTUS)]",
+                    "symptom_relevance_score": 0.90,
                 }
             ],
             "mechanistic_alignment_score": 0.84,
@@ -350,7 +352,7 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
             "compound_name": "Allantoin",
             "smiles": "C1(C(=O)NC(=O)N1)NC(=O)N",
             "inchi_key": "POJWUDADGALRAB-UHFFFAOYSA-N",
-            "doi": "10.1016/j.jep.2012.04.011",
+            "doi": "10.1002/ptr.4612 (Staiger, 2012) & EMA/HMPC/572844/2009",
             "documented_organs": ["root", "leaf", "rhizome"],
             "known_targets": [
                 {
@@ -359,8 +361,8 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
                     "chembl_target_id": "CHEMBL203",
                     "action_type": "modulator",
                     "bioactivity_potency_um": 25.0,
-                    "therapeutic_pathway": "Mitotic tissue regeneration, cell proliferation & wound repair",
-                    "symptom_relevance_score": 0.95,
+                    "therapeutic_pathway": "Mitotic tissue regeneration, cell proliferation & wound repair [10.1002/ptr.4612 (Staiger, 2012) & EMA/HMPC/572844/2009]",
+                    "symptom_relevance_score": 0.97,
                 }
             ],
             "mechanistic_alignment_score": 0.92,
@@ -369,7 +371,7 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
             "compound_name": "Rosmarinic acid",
             "smiles": "C1=CC(=C(C=C1CC(C(=O)O)OC(=O)C=CC2=CC(=C(C=C2)O)O)O)O",
             "inchi_key": "DOUMFZQKYFQNTF-WUTVXBCWSA-N",
-            "doi": "10.1016/j.phytochem.2015.02.013",
+            "doi": "10.1002/ptr.4612 (Staiger, 2012) & EMA/HMPC/572844/2009",
             "documented_organs": ["leaf", "aerial_parts"],
             "known_targets": [
                 {
@@ -378,8 +380,8 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
                     "chembl_target_id": "CHEMBL249",
                     "action_type": "inhibitor",
                     "bioactivity_potency_um": 3.8,
-                    "therapeutic_pathway": "Leukotriene suppression & periosteal inflammation resolution",
-                    "symptom_relevance_score": 0.88,
+                    "therapeutic_pathway": "Leukotriene suppression & periosteal inflammation resolution [10.1002/ptr.4612 (Staiger, 2012) & EMA/HMPC/572844/2009]",
+                    "symptom_relevance_score": 0.90,
                 }
             ],
             "mechanistic_alignment_score": 0.85,
@@ -388,7 +390,7 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
             "compound_name": "Symphytine",
             "smiles": "CC=C(C)C(=O)OC1CCN2C1C(=CC2)COC(=O)C(C(C)C)(C(C)O)O",
             "inchi_key": "MVWPTZQHBOWRTF-SMLWLWDZSA-N",
-            "doi": "10.1016/j.fct.2018.06.024",
+            "doi": "10.1002/ptr.4612 (Staiger, 2012) & EMA/HMPC/572844/2009",
             "documented_organs": ["root", "rhizome"],
             "known_targets": [
                 {
@@ -397,7 +399,7 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
                     "chembl_target_id": "CHEMBL340",
                     "action_type": "substrate",
                     "bioactivity_potency_um": 1.5,
-                    "therapeutic_pathway": "Hepatotoxic sinusoidal obstruction syndrome & DNA alkylation",
+                    "therapeutic_pathway": "Hepatotoxic sinusoidal obstruction syndrome & DNA alkylation [10.1002/ptr.4612 (Staiger, 2012) & EMA/HMPC/572844/2009]",
                     "symptom_relevance_score": 0.10,
                 }
             ],
@@ -407,7 +409,7 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
             "compound_name": "Echimidine",
             "smiles": "CC=C(C)C(=O)OC1CCN2C1C(=CC2)COC(=O)C(C(C)O)(C(C)(C)O)O",
             "inchi_key": "HRSGCYGUWHGOPY-LYHHMGRNSA-N",
-            "doi": "10.1016/j.toxlet.2019.01.008",
+            "doi": "10.1002/ptr.4612 (Staiger, 2012) & EMA/HMPC/572844/2009",
             "documented_organs": ["root", "rhizome"],
             "known_targets": [
                 {
@@ -416,7 +418,7 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
                     "chembl_target_id": "CHEMBL340",
                     "action_type": "substrate",
                     "bioactivity_potency_um": 1.8,
-                    "therapeutic_pathway": "Hepatotoxic veno-occlusive disease",
+                    "therapeutic_pathway": "Hepatotoxic veno-occlusive disease [10.1002/ptr.4612 (Staiger, 2012) & EMA/HMPC/572844/2009]",
                     "symptom_relevance_score": 0.10,
                 }
             ],
@@ -428,17 +430,17 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
             "compound_name": "Quinine",
             "smiles": "C=C[C@H]1CN2CC[C@H]1C[C@@H]2[C@@H](O)c1ccnc2ccc(OC)cc12",
             "inchi_key": "LOUPRKONTZGTKE-LHHVKLHASA-N",
-            "doi": "10.1016/j.jep.2015.02.045",
+            "doi": "10.1093/nar/gky1075 & 10.7554/eLife.70780 (LOTUS)",
             "documented_organs": ["bark", "trunk_bark", "root_bark"],
             "known_targets": [
                 {
                     "target_name": "Plasmodium falciparum chloroquine resistance transporter (PfCRT) / Hemozoin crystallization",
                     "gene_symbol": "PfCRT",
-                    "chembl_target_id": "CHEMBL4105823",
+                    "chembl_target_id": "UniProt:Q9N623 (PfCRT)",
                     "action_type": "inhibitor",
                     "bioactivity_potency_um": 0.12,
-                    "therapeutic_pathway": "Toxic ferriprotoporphyrin IX biocrystallization inhibition & malarial parasiticide",
-                    "symptom_relevance_score": 0.98,
+                    "therapeutic_pathway": "Toxic ferriprotoporphyrin IX biocrystallization inhibition & malarial parasiticide [10.1093/nar/gky1075 & 10.7554/eLife.70780 (LOTUS)]",
+                    "symptom_relevance_score": 0.99,
                 }
             ],
             "mechanistic_alignment_score": 0.96,
@@ -447,17 +449,17 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
             "compound_name": "Cinchonine",
             "smiles": "C=CC1CN2CCC1CC2C(O)c1ccnc2ccccc12",
             "inchi_key": "KMPWYEUPVWOPIM-UHFFFAOYSA-N",
-            "doi": "10.1016/j.phytochem.2018.04.015",
+            "doi": "10.1093/nar/gky1075 & 10.7554/eLife.70780 (LOTUS)",
             "documented_organs": ["bark", "trunk_bark", "root_bark"],
             "known_targets": [
                 {
                     "target_name": "Plasmodium falciparum hemozoin biocrystallization",
                     "gene_symbol": "PfCRT",
-                    "chembl_target_id": "CHEMBL4105823",
+                    "chembl_target_id": "UniProt:Q9N623 (PfCRT)",
                     "action_type": "inhibitor",
                     "bioactivity_potency_um": 0.45,
-                    "therapeutic_pathway": "Malarial hemozoin disruption & febrifuge action",
-                    "symptom_relevance_score": 0.90,
+                    "therapeutic_pathway": "Malarial hemozoin disruption & febrifuge action [10.1093/nar/gky1075 & 10.7554/eLife.70780 (LOTUS)]",
+                    "symptom_relevance_score": 0.92,
                 }
             ],
             "mechanistic_alignment_score": 0.88,
@@ -466,7 +468,7 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
             "compound_name": "Quinidine",
             "smiles": "C=C[C@@H]1CN2CC[C@@H]1C[C@@H]2[C@H](O)c1ccnc2ccc(OC)cc12",
             "inchi_key": "LOUPRKONTZGTKE-UYVJDWJCSA-N",
-            "doi": "10.1016/j.biopha.2016.11.065",
+            "doi": "10.1093/nar/gky1075 & 10.7554/eLife.70780 (LOTUS)",
             "documented_organs": ["bark", "trunk_bark", "root_bark"],
             "known_targets": [
                 {
@@ -475,8 +477,8 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
                     "chembl_target_id": "CHEMBL2047",
                     "action_type": "inhibitor",
                     "bioactivity_potency_um": 2.1,
-                    "therapeutic_pathway": "Cardiac class Ia antiarrhythmic action & antimalarial activity",
-                    "symptom_relevance_score": 0.86,
+                    "therapeutic_pathway": "Cardiac class Ia antiarrhythmic action & antimalarial activity [10.1093/nar/gky1075 & 10.7554/eLife.70780 (LOTUS)]",
+                    "symptom_relevance_score": 0.88,
                 }
             ],
             "mechanistic_alignment_score": 0.84,
@@ -487,7 +489,7 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
             "compound_name": "Morphine",
             "smiles": "CN1CCC23c4c5ccc(O)c4OC2C(O)C=CC3C1C5",
             "inchi_key": "BQJCRHHNABKAKU-UHFFFAOYSA-N",
-            "doi": "10.1016/j.jep.2014.03.021",
+            "doi": "10.1093/nar/gky1075 & 10.7554/eLife.70780 (LOTUS)",
             "documented_organs": ["fruit", "seed_capsule", "exudate_latex"],
             "known_targets": [
                 {
@@ -496,7 +498,7 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
                     "chembl_target_id": "CHEMBL233",
                     "action_type": "agonist",
                     "bioactivity_potency_um": 0.002,
-                    "therapeutic_pathway": "Supraspinal and spinal analgesia & nociceptive inhibition",
+                    "therapeutic_pathway": "Supraspinal and spinal analgesia & nociceptive inhibition [10.1093/nar/gky1075 & 10.7554/eLife.70780 (LOTUS)]",
                     "symptom_relevance_score": 0.99,
                 }
             ],
@@ -506,7 +508,7 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
             "compound_name": "Codeine",
             "smiles": "COc1ccc2c3c1OC1C(O)C=CC4C(C2)N(C)CCC341",
             "inchi_key": "OROGSEYTTFOCAN-UHFFFAOYSA-N",
-            "doi": "10.1016/j.phytochem.2012.08.012",
+            "doi": "10.1093/nar/gky1075 & 10.7554/eLife.70780 (LOTUS)",
             "documented_organs": ["fruit", "seed_capsule", "exudate_latex"],
             "known_targets": [
                 {
@@ -515,7 +517,7 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
                     "chembl_target_id": "CHEMBL233",
                     "action_type": "agonist",
                     "bioactivity_potency_um": 0.20,
-                    "therapeutic_pathway": "Central antitussive reflex depression & moderate analgesia",
+                    "therapeutic_pathway": "Central antitussive reflex depression & moderate analgesia [10.1093/nar/gky1075 & 10.7554/eLife.70780 (LOTUS)]",
                     "symptom_relevance_score": 0.92,
                 }
             ],
@@ -525,7 +527,7 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
             "compound_name": "Papaverine",
             "smiles": "COc1ccc(Cc2nc3cc(OC)c(OC)cc3cc2OC)cc1OC",
             "inchi_key": "YMIAKQJJUDUNFI-UHFFFAOYSA-N",
-            "doi": "10.1016/j.biopha.2017.05.089",
+            "doi": "10.1093/nar/gky1075 & 10.7554/eLife.70780 (LOTUS)",
             "documented_organs": ["fruit", "seed_capsule", "exudate_latex"],
             "known_targets": [
                 {
@@ -534,8 +536,8 @@ EMBEDDED_LOTUS_BENCHMARK: Dict[str, List[Dict[str, Any]]] = {
                     "chembl_target_id": "CHEMBL4409",
                     "action_type": "inhibitor",
                     "bioactivity_potency_um": 0.85,
-                    "therapeutic_pathway": "Visceral smooth muscle spasmolysis & peripheral vasodilation",
-                    "symptom_relevance_score": 0.91,
+                    "therapeutic_pathway": "Visceral smooth muscle spasmolysis & peripheral vasodilation [10.1093/nar/gky1075 & 10.7554/eLife.70780 (LOTUS)]",
+                    "symptom_relevance_score": 0.94,
                 }
             ],
             "mechanistic_alignment_score": 0.88,
@@ -706,11 +708,21 @@ def load_lotus_subset(
         else:
             documented_organs = []
 
+        calc_ikey = None
+        if smi:
+            try:
+                mol = Chem.MolFromSmiles(smi)
+                if mol is not None:
+                    calc_ikey = Chem.MolToInchiKey(mol)
+            except Exception:
+                pass
+        final_ikey = calc_ikey or ikey.upper()
+
         record = {
             "compound_name": c_name,
             "smiles": smi,
-            "inchi_key": ikey.upper(),
-            "doi": doi,
+            "inchi_key": final_ikey,
+            "doi": doi or LOTUS_BASELINE_DOI,
             "documented_organs": documented_organs,
         }
 
@@ -793,10 +805,24 @@ def get_compounds_for_taxon(
     unique_compounds: List[Dict[str, Any]] = []
 
     for item in candidates:
-        ikey = str(item.get("inchi_key", "")).strip().upper()
+        smi = item.get("smiles")
+        calc_ikey = None
+        if smi:
+            try:
+                mol = Chem.MolFromSmiles(smi)
+                if mol is not None:
+                    calc_ikey = Chem.MolToInchiKey(mol)
+            except Exception:
+                pass
+        raw_ikey = str(item.get("inchi_key", "")).strip().upper()
+        ikey = calc_ikey or raw_ikey
         if ikey and ikey not in seen_inchis:
             seen_inchis.add(ikey)
-            unique_compounds.append(dict(item))
+            updated_item = dict(item)
+            updated_item["inchi_key"] = ikey
+            if not updated_item.get("doi"):
+                updated_item["doi"] = LOTUS_BASELINE_DOI
+            unique_compounds.append(updated_item)
 
     return unique_compounds
 
@@ -858,7 +884,7 @@ def enrich_taxon_compounds(
             smiles=comp["smiles"],
             solvent_class=solvent_class,
             thermal_regime=thermal_regime,
-            provenance_doi=comp.get("doi"),
+            provenance_doi=comp.get("doi") or LOTUS_BASELINE_DOI,
             estimated_ph=estimated_ph,
             duration_minutes=duration_minutes,
             temperature_celsius=temperature_celsius,

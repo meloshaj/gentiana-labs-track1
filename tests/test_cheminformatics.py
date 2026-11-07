@@ -44,6 +44,23 @@ def test_structural_alerts():
     assert desc_rutin["toxicity_alerts"] == []
 
 
+def test_aristolochic_acid_structural_alert_specificity():
+    """Verify that bare phenanthrene does not trigger aristolochic acid derivative alert."""
+    phenanthrene_smiles = "c1ccc2c(c1)ccc1ccccc21"
+    desc_phen = calculate_descriptors(phenanthrene_smiles)
+    assert desc_phen is not None
+    assert "aristolochic_acid_derivative" not in desc_phen["toxicity_alerts"]
+
+    # InChIKey dynamic calculation check
+    rec = create_phytochemical_record(
+        compound_name="Phenanthrene",
+        smiles=phenanthrene_smiles,
+    )
+    assert rec is not None
+    assert len(rec.inchi_key) == 27
+    assert rec.inchi_key == desc_phen["inchi_key"]
+
+
 # ==============================================================================
 # Requirement 3: Molecular Property Calculation Tests
 # ==============================================================================
