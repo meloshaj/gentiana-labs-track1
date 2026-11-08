@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+
 import pandas as pd
 import pytest
+from streamlit.testing.v1 import AppTest
 
 from app.main import (
     CASE_STUDIES,
@@ -158,6 +161,22 @@ def test_build_graph_html_and_inlining():
     # Ensure inline local assets function runs without error
     inlined = _inline_local_assets('<script src="lib/bindings/utils.js"></script>')
     assert inlined is not None
+
+
+def test_all_primary_streamlit_tabs_render_without_exceptions():
+    """Exercise all primary tabs under Streamlit's test runtime."""
+    app_file = Path(__file__).resolve().parents[1] / "app" / "main.py"
+    app = AppTest.from_file(str(app_file))
+    app.run(timeout=90)
+
+    assert not app.exception
+    labels = {tab.label for tab in app.tabs}
+    assert {
+        "🌿 Literature & Protocols",
+        "🕸️ Knowledge Graph",
+        "🧪 In Silico Formulator",
+        "📄 Archival Corpus Miner",
+    } <= labels
 
 
 def test_compute_optimization_grid_yield_and_selectivity():

@@ -6,6 +6,7 @@ networkx>=3.3
 pyvis>=0.3.2
 pydantic>=2.7
 rdkit>=2024.3
+requests>=2.32
 openai>=1.40
 httpx>=0.27
 python-dotenv>=1.0

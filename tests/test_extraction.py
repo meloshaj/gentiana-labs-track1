@@ -11,6 +11,7 @@ from src.extraction import (
     batch_extract_from_documents,
     mock_extract_hypericum_sample,
     get_llm_client,
+    has_configured_llm_credentials,
 )
 
 SAMPLE_PASSAGE = (
@@ -21,6 +22,29 @@ SAMPLE_PASSAGE = (
     "anxiety, the dried leaves and flowers are boiled in fresh spring water for fifteen minutes to prepare a bitter "
     "decoction taken orally twice each day."
 )
+
+
+def test_has_configured_llm_credentials_recognizes_all_supported_providers(monkeypatch):
+    """UI feature gating must agree with the extractor's provider factory."""
+    for name in (
+        "LLM_API_KEY",
+        "OPENAI_API_KEY",
+        "GEMINI_API_KEY",
+        "AZURE_OPENAI_API_KEY",
+        "AZURE_OPENAI_ENDPOINT",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    assert not has_configured_llm_credentials()
+
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    assert has_configured_llm_credentials()
+    monkeypatch.delenv("GEMINI_API_KEY")
+
+    monkeypatch.setenv("AZURE_OPENAI_API_KEY", "test-azure-key")
+    assert not has_configured_llm_credentials()
+    monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://example.openai.azure.com")
+    assert has_configured_llm_credentials()
 
 
 def test_empty_passage_extraction():

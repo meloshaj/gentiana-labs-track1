@@ -4,7 +4,10 @@ build/
 .cache/
 .env
 .env.local
+.env.*
 !.env.example
+.streamlit/secrets.toml
+secrets.toml
 .vite/
 vite.config.*.timestamp-*
 *.tsbuildinfo
@@ -23,3 +26,15 @@ logs/
 /.opencode-skills/
 .venv/
 __pycache__/
+.pytest_cache/
+*.py[cod]
+*$py.class
+.coverage
+coverage.xml
+htmlcov/
+data/cache/
+tmp/
+temp/
+test-output/
+test-results/
+*.tmp

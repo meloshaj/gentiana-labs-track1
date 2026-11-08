@@ -35,6 +35,20 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
 
+
+def has_configured_llm_credentials() -> bool:
+    """Return whether a supported LLM provider has sufficient configuration.
+
+    This checks configuration only; it never instantiates a client or sends a
+    network request. UI callers use it to choose live extraction or the
+    deterministic offline fallback.
+    """
+    standard_key = os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY")
+    azure_ready = bool(
+        os.getenv("AZURE_OPENAI_API_KEY") and os.getenv("AZURE_OPENAI_ENDPOINT")
+    )
+    return bool(standard_key or os.getenv("GEMINI_API_KEY") or azure_ready)
+
 # ==============================================================================
 # System Prompt
 # ==============================================================================
@@ -337,9 +351,7 @@ def main() -> None:
     print(f"Region:          {region}")
     print(f"\nInput Passage:\n\"{sample_text}\"\n")
 
-    api_key = os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY")
-
-    if api_key:
+    if has_configured_llm_credentials():
         print(f"Connecting to LLM (Model: {DEFAULT_MODEL})...")
         try:
             batch = extract_from_text(sample_text, source_citation=source_citation, region=region)
@@ -348,7 +360,7 @@ def main() -> None:
             print(f"Live LLM call failed ({e}). Falling back to benchmark extraction.")
             batch = mock_extract_hypericum_sample(source_citation=source_citation, region=region)
     else:
-        print("Note: Neither 'LLM_API_KEY' nor 'OPENAI_API_KEY' set in environment.")
+        print("Note: No supported LLM provider credentials are set in the environment.")
         print("Running deterministic benchmark extraction on the multi-preparation paragraph...\n")
         batch = mock_extract_hypericum_sample(source_citation=source_citation, region=region)
 

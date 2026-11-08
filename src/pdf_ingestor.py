@@ -13,7 +13,6 @@ import concurrent.futures
 import io
 import json
 import logging
-import os
 import re
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
@@ -21,7 +20,7 @@ import pandas as pd
 import pypdf
 
 from src.cheminformatics import detect_structural_alerts
-from src.extraction import extract_from_text, get_llm_client
+from src.extraction import extract_from_text, get_llm_client, has_configured_llm_credentials
 from src.graph_builder import DecoctionGraphBuilder
 from src.lotus_retriever import enrich_taxon_compounds
 from src.mechanism import get_targets_for_compound, score_mechanistic_alignment, validate_mechanistic_path
@@ -699,7 +698,7 @@ def process_document_chunks(
     if not chunks:
         return ExtractionBatch(source_corpus=document_title, records=[])
 
-    has_key = bool(os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY"))
+    has_key = has_configured_llm_credentials()
     use_offline = force_offline or not has_key
 
     all_records: List[EthnoPreparationRecord] = []

@@ -28,6 +28,7 @@ try:
 except ImportError:
     rdMolDraw2D = None
 import streamlit as st
+import streamlit.components.v1 as components
 def render_iframe_html(html_content: str, height: int = 720) -> None:
     """Render HTML content using st.iframe (preferred) with fallback for older Streamlit versions."""
     if hasattr(st, "iframe"):
@@ -42,7 +43,11 @@ from src.cheminformatics import (
     compute_logd,
     detect_structural_alerts,
 )
-from src.extraction import extract_from_text, mock_extract_hypericum_sample
+from src.extraction import (
+    extract_from_text,
+    has_configured_llm_credentials,
+    mock_extract_hypericum_sample,
+)
 from src.graph_builder import (
     DecoctionGraphBuilder,
     COLOR_PLANT,
@@ -1006,10 +1011,10 @@ def sidebar() -> Dict[str, Any]:
 
 def raw_text_inputs() -> Optional[Dict[str, Any]]:
     """Render the custom-text form and return the mined result stored in session state."""
-    has_key = bool(os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY"))
+    has_key = has_configured_llm_credentials()
     st.subheader("Raw Text Mining")
     if not has_key:
-        st.info("No LLM API key configured (`LLM_API_KEY` or `OPENAI_API_KEY`). Using offline keyword fallback "
+        st.info("No supported LLM credentials configured. Using offline keyword fallback "
                 "recognizing LOTUS benchmark species: " + ", ".join(known_taxa()) + ".")
     with st.form("raw_text_form"):
         text = st.text_area("Ethnobotanical Passage", height=160, placeholder="Paste a historical recipe, herbal folio, or ethnographic field interview...")
