@@ -17,7 +17,9 @@ from app.main import (
     compute_optimization_grid,
     load_case,
     prep_label,
+    rank_candidate_frame,
     scatter,
+    selected_target_summary,
     status_for,
 )
 from src.schemas import EthnoPreparationRecord
@@ -124,6 +126,24 @@ def test_build_frame_and_scatter():
     fig = scatter(df_filtered, "Test Scatter", ranges)
     assert fig is not None
     assert hasattr(fig, "data")
+
+
+def test_dashboard_target_and_lead_ranking_follow_selected_indication():
+    """Keep target cards, comparative leads, and exported rows semantically aligned."""
+    case = load_case("Hypericum perforatum")
+    analyses = analyze_records(json.dumps(case["records"]))
+
+    oil_frame = build_frame(analyses[0], threshold=0.40, flag_toxic=False, show_excluded=True)
+    oil_hyperforin = oil_frame[oil_frame["Compound Name"] == "Hyperforin"].iloc[0]
+    assert "TRPC6" in oil_hyperforin["Target"]
+
+    target_name, target_id, potency = selected_target_summary(analyses[0], threshold=0.40)
+    assert target_name == "Transient receptor potential cation channel subfamily C member 6"
+    assert target_id.startswith("CHEMBL4523378")
+    assert potency != "Unavailable"
+
+    ranked = rank_candidate_frame(oil_frame, threshold=0.40)
+    assert ranked.iloc[0]["Compound Name"] == "Hyperforin"
 
 
 def test_build_graph_html_and_inlining():

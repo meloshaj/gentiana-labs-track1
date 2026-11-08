@@ -470,13 +470,20 @@ def build_frame(analysis: Dict[str, Any], threshold: float, flag_toxic: bool, sh
         primary_target = "None"
         align_score = float(c.get("mechanistic_alignment_score", 0.0))
         if c.get("known_targets"):
-            t = c["known_targets"][0]
-            gene = t.get("gene_symbol", "")
-            action = t.get("action_type", "")
+            targets = [TargetMechanismRecord(**tk) if isinstance(tk, dict) else tk for tk in c["known_targets"]]
+            t = max(
+                targets,
+                key=lambda target: score_mechanistic_alignment([target], rec_ind) if rec_ind else target.symptom_relevance_score,
+            )
+            if isinstance(t, TargetMechanismRecord):
+                gene = t.gene_symbol
+                action = t.action_type
+            else:
+                gene = t.get("gene_symbol", "")
+                action = t.get("action_type", "")
             primary_target = f"{gene} ({action})" if gene else action
             if rec_ind:
                 try:
-                    targets = [TargetMechanismRecord(**tk) if isinstance(tk, dict) else tk for tk in c["known_targets"]]
                     calc_align = score_mechanistic_alignment(targets, rec_ind)
                     align_score = max(align_score, calc_align)
                 except Exception:
@@ -503,6 +510,42 @@ def build_frame(analysis: Dict[str, Any], threshold: float, flag_toxic: bool, sh
     if not show_excluded and not df.empty:
         df = df[~df["Below Threshold"]]
     return df.reset_index(drop=True)
+
+
+def rank_candidate_frame(df: pd.DataFrame, threshold: float) -> pd.DataFrame:
+    """Rank compounds consistently across dashboard views.
+
+    Plausible compounds are preferred; within that set, indication alignment
+    is the primary criterion and extraction plausibility breaks ties.
+    """
+    if df.empty:
+        return df.copy()
+    ranked = df.copy()
+    plausible = ranked[ranked["Plausibility Score"] >= threshold]
+    pool = plausible if not plausible.empty else ranked
+    return pool.sort_values(
+        ["Mechanistic Alignment", "Plausibility Score"],
+        ascending=False,
+    ).reset_index(drop=True)
+
+
+def selected_target_summary(analysis: Dict[str, Any], threshold: float) -> Tuple[str, str, str]:
+    """Return the target summary for the selected preparation only."""
+    frame = rank_candidate_frame(build_frame(analysis, threshold, False, True), threshold)
+    if frame.empty:
+        return "No validated target", "Target unavailable", "Unavailable"
+    compound_name = frame.iloc[0]["Compound Name"]
+    compound = next((c for c in analysis["compounds"] if c["compound_name"] == compound_name), None)
+    if not compound or not compound.get("known_targets"):
+        return "No validated target", "Target unavailable", "Unavailable"
+    rec_ind = analysis.get("record", {}).get("verbatim_indication", "")
+    targets = [TargetMechanismRecord(**t) if isinstance(t, dict) else t for t in compound["known_targets"]]
+    target = max(
+        targets,
+        key=lambda t: score_mechanistic_alignment([t], rec_ind) if rec_ind else t.symptom_relevance_score,
+    )
+    potency = f"{target.bioactivity_potency_um:.2f} µM" if target.bioactivity_potency_um else "Active"
+    return target.target_name or target.gene_symbol, target.chembl_target_id or target.gene_symbol, potency
 
 
 def scatter(df: pd.DataFrame, title: str, ranges: Dict[str, List[float]]) -> go.Figure:
@@ -1021,19 +1064,7 @@ def render_mining_view(cfg: Dict[str, Any]) -> None:
     hydrophilic_count = sum(1 for c in all_compounds if c.get("clogp", 0.0) < 1.5)
     precip_count = sum(1 for c in all_compounds if c["extraction_plausibility_score"] < cfg["threshold"])
 
-    top_target_name = "TRPC6 Ion Channel"
-    top_target_id = "CHEMBL4523378"
-    top_potency = "0.3 µM (Nanomolar Potency)"
-    for a in analyses:
-        for c in a["compounds"]:
-            if c.get("known_targets"):
-                t = c["known_targets"][0]
-                top_target_name = t.get("target_name") or t.get("gene_symbol")
-                top_target_id = t.get("chembl_target_id") or "Target Identified"
-                pot = t.get("bioactivity_potency_um")
-                top_potency = f"{pot:.2f} µM" if pot else "Active"
-                break
-
+    top_target_name, top_target_id, top_potency = selected_target_summary(first_a, cfg["threshold"])
     toxic_hits = sum(len(c.get("toxicity_alerts", [])) for c in all_compounds)
     safety_status = "0 Active Alerts" if toxic_hits == 0 else f"{toxic_hits} Alerts Flagged"
     safety_color = "#4edea3" if toxic_hits == 0 else "#ef4444"
@@ -1070,7 +1101,7 @@ def render_mining_view(cfg: Dict[str, Any]) -> None:
 
       <div class="dg-kpi-card">
         <div class="dg-kpi-label">
-          <span>Top Validated Target</span>
+          <span>Selected Preparation Target</span>
           <span style="color:#d0bcff;font-family:JetBrains Mono;">{top_target_id}</span>
         </div>
         <div class="dg-kpi-value" style="font-size:1.25rem;color:#d0bcff;">
@@ -1165,16 +1196,8 @@ def render_mining_view(cfg: Dict[str, Any]) -> None:
                 lead_logd = 0.0
                 lead_surv = 1.0
                 if not df.empty:
-                    def _rank_candidate(row):
-                        s_ext = float(row["Plausibility Score"])
-                        align = float(row.get("Mechanistic Alignment", 0.0))
-                        if s_ext >= 0.45:
-                            return s_ext * (1.0 + align)
-                        return s_ext
-
-                    ranked_df = df.copy()
-                    ranked_df["_rank"] = ranked_df.apply(_rank_candidate, axis=1)
-                    top_row = ranked_df.sort_values(["_rank", "Plausibility Score"], ascending=False).iloc[0]
+                    ranked_df = rank_candidate_frame(df, cfg["threshold"])
+                    top_row = ranked_df.iloc[0]
                     lead_name = top_row["Compound Name"]
                     lead_score = top_row["Plausibility Score"]
                     lead_logd = top_row["logD (pH)"]
